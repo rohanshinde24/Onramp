@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from onramp.config import get_settings
 from onramp.db import migrate
+from onramp.marketplace.models import MarketplaceBase
 
 
 def _recreate_database(url: str) -> str:
@@ -83,3 +84,15 @@ def marketplace_sessions(marketplace_engine: Engine) -> Iterator[sessionmaker[Se
 def marketplace_session(marketplace_sessions: sessionmaker[Session]) -> Iterator[Session]:
     with marketplace_sessions() as session:
         yield session
+
+
+@pytest.fixture
+def marketplace_committed(marketplace_engine: Engine) -> Iterator[sessionmaker[Session]]:
+    """Real committing sessions, for tests that need concurrent transactions.
+
+    Tables are truncated afterwards.
+    """
+    yield sessionmaker(marketplace_engine, expire_on_commit=False)
+    tables = ", ".join(f'"{t}"' for t in MarketplaceBase.metadata.tables)
+    with marketplace_engine.begin() as connection:
+        connection.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))

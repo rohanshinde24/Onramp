@@ -103,3 +103,10 @@ class PaymentEventRecord(Record):
     amount_cents: int
     failure_reason: str | None
     occurred_at: datetime
+
+
+class DocumentRequestRecord(Record):
+    kind = "document_request"
+    worker_id: str
+    document_kind: str
+    requested_at: datetime

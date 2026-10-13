@@ -224,6 +224,19 @@ class PaymentEvent(MarketplaceBase):
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class DocumentRequest(MarketplaceBase):
+    """A request sent to a worker to upload a named document."""
+
+    __tablename__ = "document_request"
+    __table_args__ = (_tenant_key("document_request"), _tenant_fk("worker_id", "worker"))
+
+    id: Mapped[str] = id_column(primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenant.id"), nullable=False)
+    worker_id: Mapped[str] = id_column()
+    document_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class WriteRequest(MarketplaceBase):
     """Idempotency record for every marketplace write.
 
