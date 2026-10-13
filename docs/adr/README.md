@@ -11,7 +11,7 @@ superseded by a new record, never edited to reverse its decision.
 | [004](004-kafka-topics-and-ordering.md) | Kafka topics, keys and ordering | Accepted |
 | [005](005-outbox-and-idempotent-consumers.md) | Transactional outbox and idempotent consumers | Accepted |
 | [006](006-temporal-case-workflows.md) | Temporal for per-case durable workflows | Accepted |
-| [007](007-langgraph-investigator.md) | LangGraph investigator without checkpointing | Accepted, revisit at Phase 10 |
+| [007](007-langgraph-investigator.md) | LangGraph investigator without checkpointing | Accepted; revisited in Phase 10, kept |
 | [008](008-action-gateway.md) | Deterministic Action Gateway | Accepted |
 | [009](009-eval-artifacts.md) | Evaluation artifact format | Accepted |
 | [010](010-process-roles-and-kubernetes.md) | Process roles now, Kubernetes at Phase 19 | Accepted |

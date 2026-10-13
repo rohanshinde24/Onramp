@@ -41,3 +41,8 @@ replace LangGraph with the hand-written loop, record that here, and update the c
 
 * LangGraph is pinned and confined to `onramp.agent`; nothing else imports it.
 * The investigation trajectory is stored by Onramp, not by LangGraph.
+
+## Revisit outcome (Phase 10)
+
+Kept. The graph has four routes out of the model node and a validation retry loop, so it is
+not linear. See docs/AGENT_DESIGN.md.

@@ -200,3 +200,60 @@ def test_provider_refusal_ends_the_investigation(world: World) -> None:
 
     assert result.status == "model_refused"
     assert result.conclusion is None
+
+
+def test_onboarding_investigation_escalates_an_unverifiable_document(world: World) -> None:
+    onboarding = toolbox(world, CaseType.ONBOARDING, subject="w_new", worker="w_new")
+    model = ScriptedModel(
+        [
+            tool_turn(call("get_worker"), call("get_verifications"), call("get_documents")),
+            tool_turn(call("get_policy_passage", passage_id="onboarding_v4_section_2_2")),
+            submit(
+                decision="escalate",
+                resolution_code=None,
+                proposed_action=None,
+                escalation_reason="identity_uncertain",
+                citations=["onboarding_v4_section_2_2"],
+                evidence_refs=["document:doc_1"],
+            ),
+        ]
+    )
+
+    result = investigate(model, onboarding, CaseType.ONBOARDING)
+
+    assert result.status == "concluded"
+    assert result.conclusion is not None
+    assert result.conclusion.escalation_reason == "identity_uncertain"
+
+
+def test_quality_review_investigation_cannot_cite_payout_policy(world: World) -> None:
+    review = toolbox(world, CaseType.QUALITY_REVIEW, subject="qr_missing", worker="w_1")
+    model = ScriptedModel(
+        [
+            tool_turn(call("get_policy_passage", passage_id="payout_v12_section_4_3")),
+            submit(
+                resolution_code="REVIEW_UPHELD",
+                proposed_action=None,
+                citations=["payout_v12_section_4_3"],
+                evidence_refs=[],
+            ),
+            submit(
+                resolution_code="REVIEW_UPHELD",
+                proposed_action=None,
+                citations=["payout_v12_section_4_3"],
+                evidence_refs=[],
+            ),
+            submit(
+                resolution_code="REVIEW_UPHELD",
+                proposed_action=None,
+                citations=["payout_v12_section_4_3"],
+                evidence_refs=[],
+            ),
+        ]
+    )
+
+    result = investigate(model, review, CaseType.QUALITY_REVIEW)
+
+    assert result.status == "invalid_output"
+    lookup = next(t for t in result.trajectory if t.get("tool") == "get_policy_passage")
+    assert lookup["error"] == "passage not found in the policy in force"
