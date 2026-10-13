@@ -291,6 +291,10 @@ Operability
 * A general-purpose ticketing or CRM system: no SLAs, macros, email channels or customer
   satisfaction surveys.
 * Fine-tuning models.
+* Per-tenant policy variants. All tenants in a deployment share one versioned policy corpus.
+  Tenants differ in data and in configuration such as the payout approval limit, not in
+  policy text. Supporting tenant-specific policies would add a tenant column to policies and
+  to the retrieval filter.
 * Multi-region deployment, or scale beyond what the benchmarks need.
 * Productivity or business-impact claims. There are no real users.
 
