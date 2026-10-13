@@ -110,6 +110,7 @@ allow_indirect_imports = true
 name = "Only the actions package writes to the marketplace (ADR-008)"
 type = "forbidden"
 source_modules = [
+    "onramp.agent",
     "onramp.api",
     "onramp.approvals",
     "onramp.audit",
@@ -124,6 +125,17 @@ source_modules = [
 forbidden_modules = ["onramp.marketplace.writer", "onramp.marketplace.activity"]
 # Code may receive a gateway object that holds a writer, but never import the writer itself.
 allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "The investigator cannot reach anything that writes (ADR-007, ADR-008)"
+type = "forbidden"
+source_modules = ["onramp.agent"]
+forbidden_modules = [
+    "onramp.actions",
+    "onramp.marketplace.writer",
+    "onramp.marketplace.activity",
+    "onramp.approvals",
+]
 
 [[tool.importlinter.contracts]]
 name = "Foundation modules do not depend on domain modules"
