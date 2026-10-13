@@ -67,7 +67,17 @@ Rules:
 
 ## 3. Case types
 
-Each case type has a fixed set of resolutions. A resolution is a closed code, not free text.
+Each case type has a fixed set of resolutions. A resolution is a closed code, not free text,
+and it ends the case. Each resolution either requires one specific action or forbids any
+action.
+
+Some outcomes do not end a case; they make it wait. These are **interim outcomes**, produced
+by checks or investigation:
+
+* `SETTLEMENT_PENDING` (payout): still inside the policy settlement window. The case waits
+  until the window closes, then re-runs checks.
+* `MISSING_REQUIREMENT` (onboarding) or missing evidence (any type): Onramp sends the worker a
+  request naming the item and the case waits for it, escalating on timeout.
 
 ### 3.1 Payout dispute
 
@@ -81,7 +91,6 @@ authorization, settlement events, incident date, payout policy version.
 | `MISSING_PAYOUT` | Work was accepted and authorized, settlement never happened, settlement window has passed | `PAYOUT_ADJUSTMENT` for the expected amount |
 | `UNDERPAID` | Settled amount is less than the amount owed under policy | `PAYOUT_ADJUSTMENT` for the difference |
 | `PAID_IN_FULL` | Settlement succeeded for the full amount | None; operator replies with evidence |
-| `SETTLEMENT_PENDING` | Still inside the policy settlement window | None; case waits until the window closes, then re-checks |
 | `NOT_ELIGIBLE` | Submission rejected or review failed, so nothing is owed | None |
 | escalate | Possible duplicate payment, conflicting payment records, amount above limit, or anything the checks and agent cannot settle | Routed to a lead |
 
@@ -95,7 +104,6 @@ document uploads, onboarding policy version.
 | Resolution | Meaning | Action |
 |---|---|---|
 | `REQUIREMENTS_MET` | All required checks passed under the applicable policy, worker not yet active | `ACTIVATE_WORKER` |
-| `MISSING_REQUIREMENT` | A required item is absent or expired | `REQUEST_EVIDENCE` naming the item; case waits |
 | `REQUIREMENT_FAILED` | A check failed in a way policy treats as final | None |
 | `ALREADY_ACTIVE` | Worker is already active | None |
 | escalate | Identity mismatch, namesake conflict, or document that cannot be classified | Routed to a lead |
@@ -129,8 +137,7 @@ INVESTIGATING -> PROPOSED | WAITING_FOR_EVIDENCE
 WAITING_FOR_EVIDENCE -> INVESTIGATING      (evidence arrived)
 WAITING_FOR_SETTLEMENT -> INITIAL_CHECKS   (window closed; re-check payment state)
 PROPOSED -> RESOLVED                       (accepted, no action needed)
-         -> AWAITING_APPROVAL              (action needs approval)
-         -> EXECUTING                      (action needs no approval)
+         -> AWAITING_APPROVAL              (every action needs approval)
          -> INVESTIGATING                  (operator rejected the proposal)
 AWAITING_APPROVAL -> EXECUTING | INVESTIGATING (rejected)
 EXECUTING -> VERIFYING -> RESOLVED
@@ -188,7 +195,12 @@ Gateway.
 | `PAYOUT_ADJUSTMENT` | Issue a one-off payment to the worker | High (financial) | Lead, amount at or under tenant limit. Above the limit, not executable; the case escalates. |
 | `OVERTURN_QUALITY_REVIEW` | Change a review result to pass | Medium | Operator |
 | `ACTIVATE_WORKER` | Set worker status to active | Medium | Operator |
-| `REQUEST_EVIDENCE` | Send the worker a request for a named document | Low | None |
+Every action changes marketplace state and requires approval.
+
+Requesting evidence is not an action in this table. It does not change account state; it
+sends the worker a request for a named document and moves the case to
+`WAITING_FOR_EVIDENCE`. It is still validated (legal state, known document kind, the case's
+own worker) and audited, and it is idempotent.
 
 Escalation is not an action. It changes only Onramp's own case state, so it is a case
 transition available to the agent, an operator, or the system on timeout or failure.
@@ -224,7 +236,6 @@ software computes, or the proposal is rejected.
 
 | Class | Examples | Requirement |
 |---|---|---|
-| Low | Request evidence | Validation only |
 | Medium | Activate worker, overturn review | Validation plus operator approval |
 | High | Any money movement | Validation plus lead approval, within limit |
 | Forbidden | Anything outside the action table | Not representable |

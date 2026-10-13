@@ -39,11 +39,9 @@ TRANSITIONS: dict[CaseState, frozenset[CaseState]] = {
     S.WAITING_FOR_EVIDENCE: frozenset({S.INVESTIGATING, S.ESCALATED}),
     # The window closed: re-run checks against current payment state.
     S.WAITING_FOR_SETTLEMENT: frozenset({S.INITIAL_CHECKS, S.ESCALATED}),
-    # Accepted without an action, sent for approval, executed directly (no approval needed),
-    # rejected back to investigation, or escalated.
-    S.PROPOSED: frozenset(
-        {S.RESOLVED, S.AWAITING_APPROVAL, S.EXECUTING, S.INVESTIGATING, S.ESCALATED}
-    ),
+    # Accepted without an action, sent for approval (every action needs one), rejected back to
+    # investigation, or escalated.
+    S.PROPOSED: frozenset({S.RESOLVED, S.AWAITING_APPROVAL, S.INVESTIGATING, S.ESCALATED}),
     S.AWAITING_APPROVAL: frozenset({S.EXECUTING, S.INVESTIGATING, S.ESCALATED}),
     S.EXECUTING: frozenset({S.VERIFYING, S.ESCALATED}),
     S.VERIFYING: frozenset({S.RESOLVED, S.ESCALATED}),
