@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+import onramp.models  # noqa: F401 - every table must be mapped before any session is used
 from onramp.cases.models import CaseType
 from onramp.cases.service import CaseService, IntakeRequest
 from onramp.config import AppEnv, get_settings

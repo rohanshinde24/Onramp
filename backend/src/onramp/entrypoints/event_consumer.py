@@ -3,6 +3,7 @@
 import logging
 import sys
 
+import onramp.models  # noqa: F401 - every table must be mapped before any session is used
 from onramp.cases.evidence_consumer import CaseEvidenceHandler
 from onramp.config import get_settings
 from onramp.db.engine import make_engine, make_session_factory

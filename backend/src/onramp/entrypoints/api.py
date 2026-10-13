@@ -6,6 +6,7 @@ within the graceful timeout.
 
 import uvicorn
 
+import onramp.models  # noqa: F401 - every table must be mapped before any session is used
 from onramp.api.app import create_app
 from onramp.api.services import AppServices, AuthConfig
 from onramp.approvals.service import ApprovalService

@@ -10,6 +10,7 @@ import sys
 import threading
 from datetime import UTC, datetime
 
+import onramp.models  # noqa: F401 - every table must be mapped before any session is used
 from onramp.config import get_settings
 from onramp.db.engine import make_engine, make_session_factory
 from onramp.entrypoints.signals import stop_on_signals

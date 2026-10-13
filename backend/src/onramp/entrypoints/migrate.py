@@ -5,6 +5,7 @@ Runs as a one-off step before new application processes start, never from inside
 
 import logging
 
+import onramp.models  # noqa: F401 - every table must be mapped before any session is used
 from onramp.config import get_settings
 from onramp.db import migrate
 from onramp.telemetry.logging import configure_logging
