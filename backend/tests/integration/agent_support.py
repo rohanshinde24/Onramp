@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from onramp.agent.policy_access import passage_lookup
 from onramp.agent.tools import CaseScope, CaseToolbox
 from onramp.cases.models import CaseType
+from onramp.identity.models import Tenant
 from onramp.marketplace.builder import WorldBuilder
 from onramp.marketplace.reader import SqlMarketplaceReader
 from onramp.policy.applicability import applicable_versions_for_domain
@@ -81,6 +82,7 @@ def world(
         g.submission("s_g", "a_g", T0)
         g.payment("pay_g", "w_g", 1, "authorized", T0, submission_id="s_g")
     with onramp_sessions() as session, session.begin():
+        session.add(Tenant(id="acme", name="Acme", payout_approval_limit_cents=50_000))
         load_documents(session, load_corpus(CORPUS))
     return onramp_sessions, marketplace_sessions
 
