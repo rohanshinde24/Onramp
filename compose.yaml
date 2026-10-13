@@ -57,6 +57,7 @@ services:
       DATABASE_URL: postgresql+psycopg://onramp:${POSTGRES_PASSWORD:-onramp-local}@postgres:5432/onramp
       MARKETPLACE_DATABASE_URL: postgresql+psycopg://onramp:${POSTGRES_PASSWORD:-onramp-local}@postgres:5432/marketplace
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?set AUTH_JWT_SECRET in .env}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:19092
     depends_on:
       postgres:
         condition: service_healthy
@@ -71,6 +72,27 @@ services:
       migrate:
         condition: service_completed_successfully
     stop_grace_period: 25s
+
+  kafka-topics:
+    profiles: ["app"]
+    build: ./backend
+    command: ["onramp-kafka-topics"]
+    environment: *app-env
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  outbox-publisher:
+    profiles: ["app"]
+    build: ./backend
+    command: ["onramp-outbox-publisher"]
+    environment: *app-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      kafka-topics:
+        condition: service_completed_successfully
+    stop_grace_period: 30s
 
 volumes:
   postgres-data:
