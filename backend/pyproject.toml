@@ -39,6 +39,10 @@ onramp-policy-indexer = "onramp.entrypoints.policy_indexer:main"
 onramp-retrieval-eval = "onramp.entrypoints.retrieval_eval:main"
 
 [project.optional-dependencies]
+# Local embedding model for dense and hybrid policy retrieval (ADR-003 benchmark).
+embeddings = [
+    "fastembed>=0.9,<0.10",
+]
 dev = [
     "pytest>=9.1,<10",
     "httpx2>=2.13,<3",

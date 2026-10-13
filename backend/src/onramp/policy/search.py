@@ -5,8 +5,8 @@ and to versions in force at the incident time before any ranking, so a passage f
 version cannot be returned however relevant its text is.
 """
 
-from collections.abc import Iterator
-from dataclasses import dataclass
+from collections.abc import Iterator, Sequence
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
@@ -14,21 +14,32 @@ from elasticsearch import Elasticsearch, helpers
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from onramp.policy.embeddings import Embedder
 from onramp.policy.models import Policy, PolicyPassage, PolicyVersion
 
-MAPPING: dict[str, Any] = {
-    "dynamic": "strict",
-    "properties": {
-        "passage_id": {"type": "keyword"},
-        "policy_id": {"type": "keyword"},
-        "domain": {"type": "keyword"},
-        "version": {"type": "integer"},
-        "section": {"type": "keyword"},
-        "heading": {"type": "text", "analyzer": "english"},
-        "text": {"type": "text", "analyzer": "english"},
-        "effective_from": {"type": "date"},
-        "effective_until": {"type": "date"},
-    },
+
+def mapping(embedding_dimensions: int | None = None) -> dict[str, Any]:
+    properties = dict(_PROPERTIES)
+    if embedding_dimensions is not None:
+        properties["embedding"] = {
+            "type": "dense_vector",
+            "dims": embedding_dimensions,
+            "index": True,
+            "similarity": "cosine",
+        }
+    return {"dynamic": "strict", "properties": properties}
+
+
+_PROPERTIES: dict[str, Any] = {
+    "passage_id": {"type": "keyword"},
+    "policy_id": {"type": "keyword"},
+    "domain": {"type": "keyword"},
+    "version": {"type": "integer"},
+    "section": {"type": "keyword"},
+    "heading": {"type": "text", "analyzer": "english"},
+    "text": {"type": "text", "analyzer": "english"},
+    "effective_from": {"type": "date"},
+    "effective_until": {"type": "date"},
 }
 
 
@@ -98,6 +109,64 @@ class ElasticsearchPolicyRetriever:
         return [_passage(hit) for hit in response["hits"]["hits"]]
 
 
+class DensePolicyRetriever:
+    """kNN over passage embeddings, with the same in-force filter applied inside the search."""
+
+    def __init__(self, client: Elasticsearch, alias: str, embedder: Embedder) -> None:
+        self._client = client
+        self._alias = alias
+        self._embedder = embedder
+
+    def search(self, domain: str, at: datetime, query: str, k: int = 5) -> list[RetrievedPassage]:
+        response = self._client.search(
+            index=self._alias,
+            size=k,
+            knn={
+                "field": "embedding",
+                "query_vector": self._embedder.embed_query(query),
+                "k": k,
+                "num_candidates": max(50, k * 5),
+                "filter": in_force_filter(domain, at),
+            },
+            source_excludes=["embedding"],
+        )
+        return [_passage(hit) for hit in response["hits"]["hits"]]
+
+
+def reciprocal_rank_fusion(
+    rankings: Sequence[Sequence[RetrievedPassage]], *, k: int = 60
+) -> list[RetrievedPassage]:
+    """Fuse ranked lists by summing 1 / (k + rank). Passages found by several lists rise."""
+    scores: dict[str, float] = {}
+    passages: dict[str, RetrievedPassage] = {}
+    for ranking in rankings:
+        for rank, passage in enumerate(ranking, start=1):
+            scores[passage.passage_id] = scores.get(passage.passage_id, 0.0) + 1.0 / (k + rank)
+            passages.setdefault(passage.passage_id, passage)
+    ordered = sorted(scores, key=lambda pid: (-scores[pid], pid))
+    return [replace(passages[pid], score=scores[pid]) for pid in ordered]
+
+
+class HybridPolicyRetriever:
+    """BM25 and dense results fused with reciprocal rank fusion."""
+
+    def __init__(
+        self, lexical: PolicyRetriever, dense: PolicyRetriever, *, depth: int = 20
+    ) -> None:
+        self._lexical = lexical
+        self._dense = dense
+        self._depth = depth
+
+    def search(self, domain: str, at: datetime, query: str, k: int = 5) -> list[RetrievedPassage]:
+        fused = reciprocal_rank_fusion(
+            [
+                self._lexical.search(domain, at, query, self._depth),
+                self._dense.search(domain, at, query, self._depth),
+            ]
+        )
+        return fused[:k]
+
+
 def _passage(hit: dict[str, Any]) -> RetrievedPassage:
     source = hit["_source"]
     return RetrievedPassage(
@@ -139,7 +208,11 @@ def _documents(session: Session) -> Iterator[dict[str, Any]]:
 
 
 def rebuild_index(
-    client: Elasticsearch, sessions: sessionmaker[Session], alias: str, now: datetime
+    client: Elasticsearch,
+    sessions: sessionmaker[Session],
+    alias: str,
+    now: datetime,
+    embedder: Embedder | None = None,
 ) -> int:
     """Build a fresh index from PostgreSQL and atomically point the alias at it.
 
@@ -147,13 +220,18 @@ def rebuild_index(
     never exposed. Older indices behind the alias are deleted after the swap.
     """
     name = f"{alias}-{now.strftime('%Y%m%d%H%M%S%f')}"
-    client.indices.create(index=name, mappings=MAPPING, settings={"number_of_replicas": 0})
+    dimensions = embedder.dimensions if embedder else None
+    client.indices.create(
+        index=name, mappings=mapping(dimensions), settings={"number_of_replicas": 0}
+    )
     with sessions() as session:
-        actions = (
-            {"_index": name, "_id": doc["passage_id"], "_source": doc}
-            for doc in _documents(session)
-        )
-        indexed, _ = helpers.bulk(client, actions, raise_on_error=True)
+        documents = list(_documents(session))
+    if embedder is not None:
+        vectors = embedder.embed_documents([f"{d['heading']}. {d['text']}" for d in documents])
+        for document, vector in zip(documents, vectors, strict=True):
+            document["embedding"] = vector
+    actions = ({"_index": name, "_id": d["passage_id"], "_source": d} for d in documents)
+    indexed, _ = helpers.bulk(client, actions, raise_on_error=True)
     client.indices.refresh(index=name)
 
     previous = (

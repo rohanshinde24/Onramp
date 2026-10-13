@@ -1,6 +1,6 @@
 import os
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -10,7 +10,12 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from onramp.policy.corpus import load_corpus
 from onramp.policy.loader import load_documents
-from onramp.policy.search import ElasticsearchPolicyRetriever, rebuild_index
+from onramp.policy.search import (
+    DensePolicyRetriever,
+    ElasticsearchPolicyRetriever,
+    HybridPolicyRetriever,
+    rebuild_index,
+)
 
 pytestmark = pytest.mark.search
 
@@ -97,3 +102,55 @@ def test_rebuild_swaps_alias_to_a_single_new_index(
 def test_naive_incident_time_is_rejected(retriever: ElasticsearchPolicyRetriever) -> None:
     with pytest.raises(ValueError, match="timezone-aware"):
         retriever.search("payout", datetime(2026, 7, 3), "settlement")
+
+
+class HashingEmbedder:
+    """Deterministic bag-of-words vectors: enough to exercise kNN and filtering without a model."""
+
+    dimensions = 64
+
+    def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
+        return [self.embed_query(t) for t in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        vector = [0.0] * self.dimensions
+        for word in text.lower().split():
+            vector[hash_word(word) % self.dimensions] += 1.0
+        vector[0] += 0.001  # never all zeros, which cosine similarity rejects
+        return vector
+
+
+def hash_word(word: str) -> int:
+    return sum(ord(c) * (i + 1) for i, c in enumerate(word.strip(".,?")))
+
+
+def test_dense_retrieval_respects_the_version_filter(
+    client: Elasticsearch, alias: str, onramp_sessions: sessionmaker[Session]
+) -> None:
+    with onramp_sessions() as session, session.begin():
+        load_documents(session, load_corpus(CORPUS))
+    embedder = HashingEmbedder()
+    rebuild_index(client, onramp_sessions, alias, datetime.now(UTC), embedder)
+    dense = DensePolicyRetriever(client, alias, embedder)
+
+    results = dense.search("payout", JULY, "settlement window calendar days", k=10)
+
+    assert results
+    assert {(r.policy_id, r.version) for r in results} == {("payout", 12)}
+
+
+def test_hybrid_combines_both_retrievers(
+    client: Elasticsearch, alias: str, onramp_sessions: sessionmaker[Session]
+) -> None:
+    with onramp_sessions() as session, session.begin():
+        load_documents(session, load_corpus(CORPUS))
+    embedder = HashingEmbedder()
+    rebuild_index(client, onramp_sessions, alias, datetime.now(UTC), embedder)
+    hybrid = HybridPolicyRetriever(
+        ElasticsearchPolicyRetriever(client, alias), DensePolicyRetriever(client, alias, embedder)
+    )
+
+    results = hybrid.search("payout", JULY, "settlement window", k=5)
+
+    assert len(results) == 5
+    assert {(r.policy_id, r.version) for r in results} == {("payout", 12)}
