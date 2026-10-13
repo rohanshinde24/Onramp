@@ -69,3 +69,19 @@ class AggregateSequence(OnrampBase):
     aggregate_type: Mapped[str] = mapped_column(String(32))
     aggregate_id: Mapped[str] = mapped_column(String(ID_LENGTH))
     last_version: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class ProcessedEvent(OnrampBase):
+    """One row per (consumer group, event) a consumer has finished with. Inserted in the same
+    transaction as the consumer's effect, so a redelivered event is recognised and skipped."""
+
+    __tablename__ = "processed_event"
+    __table_args__ = (PrimaryKeyConstraint("consumer_group", "event_id"),)
+
+    consumer_group: Mapped[str] = mapped_column(String(128))
+    event_id: Mapped[str] = mapped_column(String(ID_LENGTH))
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(16), nullable=False)
+    processed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

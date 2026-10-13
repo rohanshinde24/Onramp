@@ -3,11 +3,20 @@
 import logging
 from collections.abc import Callable, Sequence
 
-from confluent_kafka import KafkaError, KafkaException, Message, Producer
+from confluent_kafka import (
+    Consumer,
+    KafkaError,
+    KafkaException,
+    Message,
+    Producer,
+    TopicPartition,
+)
 from confluent_kafka.admin import AdminClient
 from confluent_kafka.cimpl import NewTopic
 
+from onramp.events.consumer import RawMessage
 from onramp.events.publisher import OutboundMessage, PublishResult
+from onramp.events.topics import dlq
 
 log = logging.getLogger(__name__)
 
@@ -91,3 +100,96 @@ def ensure_topics(
                 raise
             log.info("topic %s already exists", name)
     return missing
+
+
+def consumer_config(bootstrap: str, group: str, client_id: str) -> dict[str, object]:
+    return {
+        "bootstrap.servers": bootstrap,
+        "group.id": group,
+        "client.id": client_id,
+        # Offsets are committed by the runner after the database commit, never automatically.
+        "enable.auto.commit": False,
+        "auto.offset.reset": "earliest",
+    }
+
+
+class KafkaMessageSource:
+    def __init__(self, config: dict[str, object], topics: Sequence[str]) -> None:
+        self._consumer = Consumer(config)
+        self._consumer.subscribe(list(topics))
+
+    def poll(self, timeout_s: float) -> RawMessage | None:
+        msg = self._consumer.poll(timeout_s)
+        if msg is None:
+            return None
+        error = msg.error()
+        if error is not None:
+            if error.code() != KafkaError._PARTITION_EOF:
+                log.warning("consumer error: %s", error)
+            return None
+        key, value = msg.key(), msg.value()
+        headers: dict[str, bytes] = {}
+        for header in msg.headers() or []:
+            name, raw = header[0], header[1]
+            if isinstance(raw, bytes):
+                headers[str(name)] = raw
+        return RawMessage(
+            topic=msg.topic() or "",
+            partition=msg.partition() or 0,
+            offset=msg.offset() or 0,
+            key=key if isinstance(key, bytes) else None,
+            value=value if isinstance(value, bytes) else b"",
+            headers=headers,
+        )
+
+    def commit(self, message: RawMessage) -> None:
+        self._consumer.commit(
+            offsets=[TopicPartition(message.topic, message.partition, message.offset + 1)],
+            asynchronous=False,
+        )
+
+    def lag(self) -> int:
+        """Messages between this group's committed offsets and the log end, over assigned
+        partitions."""
+        assignment = self._consumer.assignment()
+        if not assignment:
+            return 0
+        total = 0
+        for tp in self._consumer.committed(assignment, timeout=5):
+            _, high = self._consumer.get_watermark_offsets(tp, timeout=5, cached=False)
+            committed = tp.offset if tp.offset >= 0 else 0
+            total += max(high - committed, 0)
+        return total
+
+    def close(self) -> None:
+        self._consumer.close()
+
+
+class KafkaDeadLetterSink:
+    def __init__(self, config: dict[str, object]) -> None:
+        self._producer = Producer(config)
+
+    def park(self, message: RawMessage, *, reason: str, error: str, group: str) -> None:
+        headers = {
+            **message.headers,
+            "dlq.reason": reason.encode(),
+            "dlq.error": error.encode(),
+            "dlq.consumer_group": group.encode(),
+            "dlq.source": f"{message.topic}/{message.partition}/{message.offset}".encode(),
+        }
+        failures: list[str] = []
+
+        def on_delivery(err: KafkaError | None, _: Message) -> None:
+            if err is not None:
+                failures.append(str(err))
+
+        self._producer.produce(
+            dlq(message.topic),
+            key=message.key,
+            value=message.value,
+            headers=list(headers.items()),
+            on_delivery=on_delivery,
+        )
+        self._producer.flush(30)
+        if failures:
+            raise KafkaException(failures[0])
