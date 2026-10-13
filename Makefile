@@ -5,7 +5,7 @@ PY := $(BACKEND)/.venv/bin
 
 install:
 	python3.13 -m venv $(BACKEND)/.venv
-	$(PY)/pip install -e '$(BACKEND)[dev]'
+	$(PY)/pip install -e '$(BACKEND)[dev,embeddings]'
 
 lint:
 	cd $(BACKEND) && .venv/bin/ruff check . && .venv/bin/ruff format --check . && .venv/bin/lint-imports
