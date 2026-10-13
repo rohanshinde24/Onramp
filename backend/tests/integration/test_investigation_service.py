@@ -16,6 +16,8 @@ from onramp.identity.roles import Role
 from onramp.investigations.service import InvestigationService, NotInvestigatingError
 from onramp.marketplace.reader import SqlMarketplaceReader
 from onramp.proposals.models import Proposal
+from onramp.workflows.activities import AgentActivities, InvestigationUnavailableError
+from onramp.workflows.contracts import CaseWorkflowInput
 from tests.integration.agent_support import T0, DatabaseRetriever, World
 from tests.integration.api_support import move_case
 from tests.integration.test_agent_graph import GATHER, submit
@@ -112,6 +114,20 @@ def test_provider_failure_leaves_the_case_to_retry(world: World) -> None:
 
     assert run.status == "model_error"
     assert _case(world[0], case_id).state == CaseState.INVESTIGATING
+
+
+def test_agent_activity_raises_on_provider_failure_so_temporal_backs_off(world: World) -> None:
+    onramp, _ = world
+    case_id = _investigating_case(world)
+
+    def down(_: Sequence[Message]) -> ModelResponse:
+        raise ModelUnavailableError("503")
+
+    activities = AgentActivities(onramp, _service(world, ScriptedModel([down])))
+
+    with pytest.raises(InvestigationUnavailableError, match="503"):
+        activities.run_investigation(CaseWorkflowInput("acme", case_id))
+    assert _case(onramp, case_id).state == CaseState.INVESTIGATING
 
 
 def test_operator_acting_mid_investigation_supersedes_the_run(world: World) -> None:

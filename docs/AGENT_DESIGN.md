@@ -72,7 +72,7 @@ A rejected conclusion goes back to the model with the problems listed.
 | concluded, resolve | Pending proposal from `agent` |
 | concluded, escalate | `ESCALATED` with the agent's reason |
 | budget_exhausted, invalid_output, model_refused | `ESCALATED`, `investigation_failed` |
-| model_error | Case stays in `INVESTIGATING` to be retried |
+| model_error | Case stays in `INVESTIGATING`; the activity fails so the workflow retries it with backoff (30 seconds doubling to 10 minutes, no attempt limit) |
 | superseded | Recorded; nothing applied, because the case changed during the run |
 
 Every run is stored in `investigation_run` with model, prompt version, status, conclusion,

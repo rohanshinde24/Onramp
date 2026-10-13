@@ -16,6 +16,14 @@ with workflow.unsafe.imports_passed_through():
 
 _ACTIVITY_TIMEOUT = timedelta(minutes=2)
 _RETRY = RetryPolicy(maximum_attempts=5)
+# A provider outage can outlast any fixed number of attempts. The case keeps waiting in
+# INVESTIGATING, retried with capped backoff, until the provider answers or a person acts.
+_INVESTIGATION_RETRY = RetryPolicy(
+    initial_interval=timedelta(seconds=30),
+    backoff_coefficient=2.0,
+    maximum_interval=timedelta(minutes=10),
+    maximum_attempts=0,
+)
 _PASSIVE_STATES = frozenset(
     {
         CaseState.AWAITING_APPROVAL,
@@ -45,7 +53,10 @@ class CaseWorkflow:
                 continue
             if state is CaseState.INVESTIGATING:
                 await self._activity(
-                    "run_investigation", request, task_queue=request.agent_task_queue
+                    "run_investigation",
+                    request,
+                    task_queue=request.agent_task_queue,
+                    retry_policy=_INVESTIGATION_RETRY,
                 )
                 continue
             if state is CaseState.EXECUTING:
@@ -89,6 +100,7 @@ class CaseWorkflow:
         request: CaseWorkflowInput,
         *,
         task_queue: str | None = None,
+        retry_policy: RetryPolicy = _RETRY,
     ) -> CaseSnapshot:
         return cast(
             CaseSnapshot,
@@ -96,7 +108,7 @@ class CaseWorkflow:
                 name,
                 request,
                 start_to_close_timeout=_ACTIVITY_TIMEOUT,
-                retry_policy=_RETRY,
+                retry_policy=retry_policy,
                 task_queue=task_queue,
                 result_type=CaseSnapshot,
             ),

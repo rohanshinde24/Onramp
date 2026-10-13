@@ -184,10 +184,10 @@ class CaseEvaluationRunner:
                 case CaseState.CREATED | CaseState.INITIAL_CHECKS:
                     workflow.run_case_checks(request)
                 case CaseState.INVESTIGATING:
+                    # A provider failure raises so the workflow retries with backoff. A script
+                    # never recovers, so here it ends the run as an application failure.
                     after = services.agent.run_investigation(request)
                     if after.state == CaseState.INVESTIGATING:
-                        # A provider failure leaves the case to be retried. A script never
-                        # recovers, so retrying would only spin.
                         raise StalledCaseError("investigation did not conclude")
                 case CaseState.WAITING_FOR_SETTLEMENT:
                     clock.advance_to(_deadline(snapshot))

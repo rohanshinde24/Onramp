@@ -247,7 +247,7 @@ def test_an_investigation_without_a_script_is_an_app_failure(
 
     assert run.status is RunStatus.APP_FAILURE
     assert run.error is not None
-    assert "did not conclude" in run.error
+    assert "InvestigationUnavailableError" in run.error
     assert run.observation is not None
 
 

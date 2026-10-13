@@ -120,6 +120,11 @@ class WorkflowActivities:
         return self.read_case(request)
 
 
+class InvestigationUnavailableError(RuntimeError):
+    """The model provider failed. Raised so Temporal retries the activity with backoff instead
+    of the workflow calling the provider again at once."""
+
+
 class AgentActivities:
     def __init__(
         self, sessions: sessionmaker[Session], investigations: InvestigationService
@@ -133,7 +138,11 @@ class AgentActivities:
             case = get_case(session, request.tenant_id, request.case_id)
             if case.state != CaseState.INVESTIGATING:
                 return _snapshot(session, case)
-        self._investigations.run(request.tenant_id, request.case_id, Actor.agent())
+        run = self._investigations.run(request.tenant_id, request.case_id, Actor.agent())
+        if run.status == "model_error":
+            # The service leaves the case in INVESTIGATING. Returning normally would make the
+            # workflow call the provider again immediately, in a loop, for as long as it is down.
+            raise InvestigationUnavailableError(f"investigation {run.id}: {run.problems}")
         with self._sessions() as session:
             return _snapshot(session, get_case(session, request.tenant_id, request.case_id))
 

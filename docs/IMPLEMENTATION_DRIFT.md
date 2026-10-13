@@ -41,6 +41,15 @@ Resolving the currently open case again after commit could target a newer case f
 subject. Evidence fallback now uses the committed audit row's causation ID to recover the exact
 case that changed.
 
+### Provider failures must back off
+
+Building the case-evaluation runner showed that a `model_error` investigation returned normally
+from its activity. The workflow saw the case still in `INVESTIGATING` and called the provider
+again at once, so an outage became a tight loop of failing calls and stored runs per case. The
+agent activity now fails on `model_error`, and the workflow retries it with capped exponential
+backoff and no attempt limit. The case still waits in `INVESTIGATING` until the provider answers
+or a person acts.
+
 ### Overturned quality reviews remain payout eligible
 
 Action Gateway review exposed an edge case where an overturned review could incorrectly suppress

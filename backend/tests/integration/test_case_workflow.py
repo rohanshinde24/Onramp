@@ -6,6 +6,7 @@ from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from onramp.cases.state import CaseState
+from onramp.workflows.activities import InvestigationUnavailableError
 from onramp.workflows.case import CaseWorkflow
 from onramp.workflows.contracts import (
     WORKFLOW_TASK_QUEUE,
@@ -175,5 +176,54 @@ def test_evidence_deadline_uses_time_skipping() -> None:
 
                 assert await handle.query(CaseWorkflow.applied_signal_ids) == []
                 assert plan.expired
+
+    asyncio.run(scenario())
+
+
+class _FlakyProviderPlan:
+    def __init__(self) -> None:
+        self.attempts = 0
+
+    @activity.defn(name="read_case")
+    async def read_case(self, _: CaseWorkflowInput) -> CaseSnapshot:
+        if self.attempts < 3:
+            return CaseSnapshot(CaseState.INVESTIGATING.value)
+        return CaseSnapshot(CaseState.RESOLVED.value)
+
+    @activity.defn(name="run_investigation")
+    async def run_investigation(self, _: CaseWorkflowInput) -> CaseSnapshot:
+        self.attempts += 1
+        if self.attempts < 3:
+            raise InvestigationUnavailableError("provider down")
+        return CaseSnapshot(CaseState.PROPOSED.value)
+
+
+def test_provider_failure_is_retried_with_backoff_not_a_tight_loop() -> None:
+    async def scenario() -> None:
+        async with await WorkflowEnvironment.start_time_skipping() as environment:
+            plan = _FlakyProviderPlan()
+            async with Worker(
+                environment.client,
+                task_queue=WORKFLOW_TASK_QUEUE,
+                workflows=[CaseWorkflow],
+                activities=[plan.read_case, plan.run_investigation],
+            ):
+                request = CaseWorkflowInput(
+                    "acme", "case_flaky", agent_task_queue=WORKFLOW_TASK_QUEUE
+                )
+                handle = await environment.client.start_workflow(
+                    CaseWorkflow.run,
+                    request,
+                    id=case_workflow_id(request.case_id),
+                    task_queue=WORKFLOW_TASK_QUEUE,
+                )
+                started = await environment.get_current_time()
+                result = await handle.result()
+                elapsed = await environment.get_current_time() - started
+
+                assert result.state == CaseState.RESOLVED
+                assert plan.attempts == 3
+                # Two failures wait 30s then 60s before the next attempt.
+                assert elapsed >= timedelta(seconds=90)
 
     asyncio.run(scenario())
