@@ -1,7 +1,7 @@
 BACKEND := backend
 PY := $(BACKEND)/.venv/bin
 
-.PHONY: install lint format typecheck test test-integration test-kafka check up down api-image migrate seed dlq-replay
+.PHONY: install lint format typecheck test test-integration test-kafka check up down api-image migrate seed dlq-replay load-policies
 
 install:
 	python3.13 -m venv $(BACKEND)/.venv
@@ -46,3 +46,6 @@ seed:
 # make dlq-replay TOPIC=marketplace.workers GROUP=onramp-case-evidence
 dlq-replay:
 	$(PY)/onramp-dlq-replay $(TOPIC) $(GROUP)
+
+load-policies:
+	$(PY)/onramp-load-policies

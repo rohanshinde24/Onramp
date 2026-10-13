@@ -17,6 +17,7 @@ ENTRYPOINTS = [
     "onramp.entrypoints.seed",
     "onramp.entrypoints.migrate",
     "onramp.entrypoints.dlq_replay",
+    "onramp.entrypoints.load_policies",
 ]
 
 
