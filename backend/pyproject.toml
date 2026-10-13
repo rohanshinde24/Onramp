@@ -82,6 +82,8 @@ source_modules = [
     "onramp.telemetry",
 ]
 forbidden_modules = ["onramp.marketplace.models", "onramp.marketplace.builder"]
+# The reader and writer import the tables; callers may use them, but not the tables directly.
+allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "Foundation modules do not depend on domain modules"
