@@ -58,14 +58,18 @@ def observe_case(
             if ref.startswith("policy_passage:")
         )
     known_passages = frozenset(session.scalars(select(PolicyPassage.passage_id)))
-    amount = _amount(action.request if action else proposal.action_params if proposal else {})
+    escalated = case.state == CaseState.ESCALATED
+    # An escalated case has no outcome from the system: a person now decides. Any proposal it
+    # made on the way is not its answer.
+    outcome = None if escalated else proposal
+    amount = _amount(action.request if action else outcome.action_params if outcome else {})
     return CaseObservation(
         scenario_id=scenario_id,
         case_type=CaseType(case.case_type),
-        resolution_code=_resolution(case, proposal),
-        action_type=ActionType(proposal.action_type) if proposal and proposal.action_type else None,
-        amount_cents=amount,
-        escalated=case.state == CaseState.ESCALATED,
+        resolution_code=None if escalated else _resolution(case, proposal),
+        action_type=ActionType(outcome.action_type) if outcome and outcome.action_type else None,
+        amount_cents=None if escalated else amount,
+        escalated=escalated,
         citations=frozenset(citations),
         known_passages=known_passages,
         policy_id=check.policy_id if check else None,
