@@ -1,8 +1,8 @@
 """Run the whole-application case evaluation: ``onramp-case-eval``.
 
-Recreates dedicated ``*_eval`` databases, runs every scenario in ``eval/cases/scenarios.yaml``
-through the real case services with scripted investigations, grades each against
-``eval/cases/truth.yaml``, and writes ``artifacts/case-eval/<run_id>/``. Exits non-zero when a
+Recreates dedicated ``*_eval`` databases, runs every scenario in a suite (by default
+``eval/cases/``) through the real case services with scripted investigations, grades each
+against the suite's truth, and writes ``artifacts/<suite>/<run_id>/``. Exits non-zero when a
 run fails the gate.
 
 The evaluation package may not import the marketplace writer (ADR-008), so the services that
@@ -50,6 +50,7 @@ def build_services(
     clock: VirtualClock,
     model: ChatModel,
     writer: MarketplaceWriter | None = None,
+    gateway: type[ActionGateway] = ActionGateway,
 ) -> CaseServices:
     reader = SqlMarketplaceReader(marketplace)
     writer = writer or SqlMarketplaceWriter(marketplace, clock)
@@ -57,9 +58,7 @@ def build_services(
     investigations = InvestigationService(onramp, reader, retriever, model, clock=clock)
     return CaseServices(
         cases=CaseService(onramp, reader, clock),
-        workflow=WorkflowActivities(
-            onramp, checks, ActionGateway(onramp, reader, writer, clock), clock
-        ),
+        workflow=WorkflowActivities(onramp, checks, gateway(onramp, reader, writer, clock), clock),
         agent=AgentActivities(onramp, investigations),
         proposals=ProposalService(onramp, clock),
         approvals=ApprovalService(onramp, clock),
@@ -68,7 +67,6 @@ def build_services(
 
 ROOT = Path(__file__).resolve().parents[4]
 CASES = ROOT / "eval" / "cases"
-COMMAND = "make case-eval"
 
 
 def _recreate(url: str) -> str:
@@ -89,6 +87,11 @@ def main() -> None:
     parser.add_argument("--truth", type=Path, default=CASES / "truth.yaml")
     parser.add_argument("--scripts", type=Path, default=CASES / "investigations.yaml")
     parser.add_argument("--min-outcome-accuracy", type=float, default=1.0)
+    parser.add_argument(
+        "--suite",
+        default="case-eval",
+        help="names the artifact directory and the make target that reproduces the run",
+    )
     args = parser.parse_args()
 
     settings = get_settings()
@@ -121,10 +124,18 @@ def main() -> None:
     started = datetime.now(UTC)
     run_id = started.strftime("%Y%m%dT%H%M%SZ")
     commit, dirty = git_state(ROOT)
-    out = ROOT / "artifacts" / "case-eval" / run_id
+    out = ROOT / "artifacts" / args.suite / run_id
     manifest = {
         "run_id": run_id,
-        "command": COMMAND,
+        "command": f"make {args.suite}",
+        "dataset": {
+            name: str(path.resolve().relative_to(ROOT))
+            for name, path in (
+                ("scenarios", args.scenarios),
+                ("truth", args.truth),
+                ("scripts", args.scripts),
+            )
+        },
         "started_at": started.isoformat(),
         "git_commit": commit,
         "git_dirty": dirty,

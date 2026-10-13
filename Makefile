@@ -1,7 +1,7 @@
 BACKEND := backend
 PY := $(BACKEND)/.venv/bin
 
-.PHONY: install lint format typecheck test test-integration test-kafka test-search check up down api-image migrate seed dlq-replay load-policies retrieval-eval case-eval
+.PHONY: install lint format typecheck test test-integration test-kafka test-search check up down api-image migrate seed dlq-replay load-policies retrieval-eval case-eval adversarial-eval
 
 install:
 	python3.13 -m venv $(BACKEND)/.venv
@@ -59,3 +59,8 @@ retrieval-eval:
 # Whole-application case evaluation with scripted investigations. Needs PostgreSQL only.
 case-eval:
 	$(PY)/onramp-case-eval
+
+# The same runner over attacks, with scripted investigators that fall for them.
+adversarial-eval:
+	$(PY)/onramp-case-eval --suite adversarial-eval --scenarios eval/adversarial/scenarios.yaml \
+		--truth eval/adversarial/truth.yaml --scripts eval/adversarial/investigations.yaml

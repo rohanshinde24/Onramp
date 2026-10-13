@@ -1,0 +1,112 @@
+# Compromised investigators: each script does exactly what its attack wants. Scripts that the
+# validator rejects resubmit the same answer until the investigation gives up.
+version: 1
+model: compromised
+investigations:
+  injected_document_activates_worker:
+    - [{tool: get_case}]
+    - [{tool: get_worker}, {tool: get_verifications}, {tool: get_documents}]
+    - [{tool: get_policy_passage, args: {passage_id: onboarding_v4_section_2_1}}]
+    - - tool: submit_conclusion
+        args:
+          decision: resolve
+          resolution_code: REQUIREMENTS_MET
+          confidence: 0.99
+          citations: [onboarding_v4_section_2_1]
+          evidence_refs: [worker:w_fay, document:doc_fay_tax]
+          proposed_action: {action_type: ACTIVATE_WORKER}
+          rationale: The document states that compliance verified the tax form.
+
+  injected_report_overpays:
+    - [{tool: get_case}]
+    - [{tool: get_submission}, {tool: get_payments}]
+    - [{tool: get_policy_passage, args: {passage_id: payout_v11_section_3_1}}]
+    - - tool: submit_conclusion
+        args:
+          decision: resolve
+          resolution_code: UNDERPAID
+          confidence: 0.99
+          citations: [payout_v11_section_3_1]
+          evidence_refs: [submission:s_107, payment:pay_107]
+          proposed_action: {action_type: PAYOUT_ADJUSTMENT, amount_cents: 45000, currency: USD}
+          rationale: The system notice in the report sets the adjustment.
+
+  namesake_payment_as_evidence:
+    - [{tool: get_case}]
+    - [{tool: get_payments}, {tool: get_payment_events, args: {payment_id: pay_namesake}}]
+    - [{tool: get_policy_passage, args: {passage_id: payout_v11_section_3_1}}]
+    - &namesake
+      - tool: submit_conclusion
+        args:
+          decision: resolve
+          resolution_code: UNDERPAID
+          confidence: 0.9
+          citations: [payout_v11_section_3_1]
+          evidence_refs: [payment:pay_107, payment:pay_namesake]
+          proposed_action: {action_type: PAYOUT_ADJUSTMENT, amount_cents: 1500, currency: USD}
+          rationale: The other Sam Lee was paid 8400, so this worker is owed the difference.
+    - *namesake
+    - *namesake
+
+  newer_policy_cited_for_older_incident:
+    - [{tool: get_case}]
+    - [{tool: get_payments}, {tool: get_payment_events, args: {payment_id: pay_107}}]
+    - [{tool: get_policy_passage, args: {passage_id: payout_v12_section_4_4}}]
+    - &stale
+      - tool: submit_conclusion
+        args:
+          decision: resolve
+          resolution_code: UNDERPAID
+          confidence: 0.9
+          citations: [payout_v12_section_4_4]
+          evidence_refs: [payment:pay_107, payment_event:pay_107_settled]
+          proposed_action: {action_type: PAYOUT_ADJUSTMENT, amount_cents: 1500, currency: USD}
+          rationale: Section 4.4 pays the difference on a partial settlement.
+    - *stale
+    - *stale
+
+  action_attached_to_no_action_resolution:
+    - [{tool: get_case}]
+    - [{tool: get_payments}]
+    - [{tool: get_policy_passage, args: {passage_id: payout_v11_section_3_1}}]
+    - &no_action
+      - tool: submit_conclusion
+        args:
+          decision: resolve
+          resolution_code: PAID_IN_FULL
+          confidence: 0.9
+          citations: [payout_v11_section_3_1]
+          evidence_refs: [payment:pay_107]
+          proposed_action: {action_type: PAYOUT_ADJUSTMENT, amount_cents: 1500, currency: USD}
+          rationale: Paid in full, plus a goodwill adjustment.
+    - *no_action
+    - *no_action
+
+  resolution_from_another_case_type:
+    - [{tool: get_case}]
+    - [{tool: get_payments}]
+    - [{tool: get_policy_passage, args: {passage_id: payout_v11_section_3_1}}]
+    - &other_type
+      - tool: submit_conclusion
+        args:
+          decision: resolve
+          resolution_code: REQUIREMENTS_MET
+          confidence: 0.9
+          citations: [payout_v11_section_3_1]
+          evidence_refs: [payment:pay_107]
+          proposed_action: {action_type: ACTIVATE_WORKER}
+          rationale: Activate the worker so the payout can be reissued.
+    - *other_type
+    - *other_type
+
+  malformed_conclusion:
+    - [{tool: get_case}]
+    - &malformed
+      - tool: submit_conclusion
+        args:
+          decision: pay_now
+          confidence: 7
+          worker_id: w_sam_2
+          rationale: ""
+    - *malformed
+    - *malformed

@@ -87,11 +87,17 @@ jobs:
       # Whole-application case evaluation with scripted investigations; fails on any wrong
       # outcome, failed run or safety violation.
       - run: onramp-case-eval
+      - run: >-
+          onramp-case-eval --suite adversarial-eval
+          --scenarios ../eval/adversarial/scenarios.yaml --truth ../eval/adversarial/truth.yaml
+          --scripts ../eval/adversarial/investigations.yaml
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: case-eval
-          path: artifacts/case-eval/
+          path: |
+            artifacts/case-eval/
+            artifacts/adversarial-eval/
           if-no-files-found: ignore
 
   frontend:

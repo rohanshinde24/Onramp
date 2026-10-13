@@ -7,31 +7,20 @@ from typing import Any
 
 import pytest
 from sqlalchemy import Engine
-from sqlalchemy.orm import Session, sessionmaker
 
-from onramp.agent.model import ChatModel
-from onramp.entrypoints.case_eval import build_services
 from onramp.evaluation.case_grading import CaseGrade, grade_case
 from onramp.evaluation.report import gate_failures, run_cases
 from onramp.evaluation.runner import (
-    CaseEvaluationRunner,
-    CaseServices,
     RunStatus,
     ScenarioRun,
-    VirtualClock,
 )
 from onramp.evaluation.scenarios import ScenarioInput, ScenarioSet, TruthSet, load_scenarios
-from onramp.evaluation.scripted import KeywordPolicyRetriever, ScriptSet, load_scripts
-from onramp.evaluation.worlds import reset_databases
+from onramp.evaluation.scripted import ScriptSet, load_scripts
 from onramp.marketplace.records import PaymentRecord
-from onramp.marketplace.writer import MarketplaceWriter, SqlMarketplaceWriter
-from onramp.policy.corpus import load_corpus
+from onramp.marketplace.writer import SqlMarketplaceWriter
+from tests.integration.eval_support import ROOT, Sessions, WriterFactory, make_runner
 
-ROOT = Path(__file__).resolve().parents[3]
 CASES = ROOT / "eval" / "cases"
-CORPUS = load_corpus(ROOT / "policies")
-Sessions = sessionmaker[Session]
-WriterFactory = Callable[[Sessions, VirtualClock], MarketplaceWriter]
 
 
 @pytest.fixture(scope="module")
@@ -39,31 +28,7 @@ def dataset() -> tuple[ScenarioSet, TruthSet]:
     return load_scenarios(CASES / "scenarios.yaml", CASES / "truth.yaml")
 
 
-def _runner(
-    engines: tuple[Engine, Engine],
-    onramp: Sessions,
-    marketplace: Sessions,
-    scripts: ScriptSet,
-    writer: WriterFactory | None = None,
-) -> CaseEvaluationRunner:
-    def services(clock: VirtualClock, model: ChatModel) -> CaseServices:
-        return build_services(
-            onramp,
-            marketplace,
-            KeywordPolicyRetriever(onramp),
-            clock,
-            model,
-            writer(marketplace, clock) if writer else None,
-        )
-
-    return CaseEvaluationRunner(
-        onramp,
-        marketplace,
-        lambda: reset_databases(*engines),
-        services,
-        CORPUS,
-        scripts.model_for,
-    )
+_runner = make_runner
 
 
 @pytest.fixture
