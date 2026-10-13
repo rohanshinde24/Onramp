@@ -36,6 +36,7 @@ class CaseWorkflow:
     @workflow.run
     async def run(self, request: CaseWorkflowInput) -> WorkflowResult:
         while True:
+            observed_signals = self._wake_version
             snapshot = await self._activity("read_case", request)
             state = CaseState(snapshot.state)
             if state in {CaseState.RESOLVED, CaseState.CLOSED_NO_ACTION}:
@@ -52,22 +53,24 @@ class CaseWorkflow:
                 await self._activity("execute_approved_action", request)
                 continue
             if state is CaseState.WAITING_FOR_SETTLEMENT:
-                await self._wait_for_signal_or_deadline(snapshot)
+                await self._wait_for_signal_or_deadline(snapshot, observed_signals)
                 await self._activity("resume_settlement_checks", request)
                 continue
             if state is CaseState.VERIFYING:
                 await self._activity("recover_action_verification", request)
                 continue
             if state in _PASSIVE_STATES:
-                self._waiting_version = self._wake_version
+                self._waiting_version = observed_signals
                 await workflow.wait_condition(self._has_new_signal)
                 continue
             raise RuntimeError(f"unsupported case state {state.value}")
 
-    async def _wait_for_signal_or_deadline(self, snapshot: CaseSnapshot) -> None:
+    async def _wait_for_signal_or_deadline(
+        self, snapshot: CaseSnapshot, observed_signals: int
+    ) -> None:
         if snapshot.wait_until is None:
             raise RuntimeError("settlement wait has no deadline")
-        self._waiting_version = self._wake_version
+        self._waiting_version = observed_signals
         delay = snapshot.wait_until - workflow.now()
         if delay <= timedelta(0):
             return
