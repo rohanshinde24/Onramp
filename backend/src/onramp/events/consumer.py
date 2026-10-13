@@ -115,12 +115,29 @@ class ConsumerRunner:
         self.stats.add(outcome)
         return outcome
 
-    def run_until_stopped(self, stop: threading.Event, poll_timeout_s: float = 0.5) -> None:
+    def run_until_stopped(
+        self,
+        stop: threading.Event,
+        poll_timeout_s: float = 0.5,
+        *,
+        on_tick: Callable[[], None] | None = None,
+        tick_interval_s: float = 15.0,
+        monotonic: Callable[[], float] = time.monotonic,
+    ) -> None:
+        """Poll and process until ``stop`` is set. ``on_tick`` runs on this same thread every
+        ``tick_interval_s``, so it can query the consumer without cross-thread access."""
+        next_tick = monotonic() + tick_interval_s
         try:
             while not stop.is_set():
                 message = self._source.poll(poll_timeout_s)
                 if message is not None:
                     self.process(message)
+                if on_tick is not None and monotonic() >= next_tick:
+                    next_tick = monotonic() + tick_interval_s
+                    try:
+                        on_tick()
+                    except Exception:
+                        log.exception("consumer tick failed")
         finally:
             self._source.close()
 
