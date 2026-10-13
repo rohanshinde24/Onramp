@@ -8,8 +8,13 @@ from onramp.evaluation.case_grading import CaseObservation, grade_case, summariz
 from onramp.evaluation.scenarios import (
     ScenarioLabelsMismatchError,
     ScenarioTruth,
+    TruthLabelError,
+    TruthSet,
     load_scenarios,
+    validate_truth,
 )
+from onramp.evaluation.worlds import WORLDS
+from onramp.policy.corpus import load_corpus
 
 
 def _truth(**overrides: object) -> ScenarioTruth:
@@ -104,7 +109,8 @@ def test_scenario_inputs_and_hidden_truth_must_match_exactly(tmp_path: Path) -> 
     truth = tmp_path / "truth.yaml"
     inputs.write_text(
         "version: 1\nscenarios:\n  - id: payout_paid\n    case_type: payout\n"
-        "    world_fixture: paid_submission\n    report: Where is my payout?\n"
+        "    world_fixture: paid_submission\n    subject_id: s_1\n"
+        "    report: Where is my payout?\n"
     )
     truth.write_text(
         "version: 1\ntruths:\n  - id: another_case\n    should_escalate: true\n"
@@ -118,3 +124,25 @@ def test_scenario_inputs_and_hidden_truth_must_match_exactly(tmp_path: Path) -> 
 def test_truth_rejects_incoherent_action_amount() -> None:
     with pytest.raises(ValueError, match="requires amount_cents"):
         _truth(action_type=ActionType.PAYOUT_ADJUSTMENT)
+
+
+ROOT = Path(__file__).resolve().parents[3]
+CASES = ROOT / "eval" / "cases"
+
+
+def test_committed_scenarios_have_worlds_and_valid_labels() -> None:
+    scenarios, truth = load_scenarios(CASES / "scenarios.yaml", CASES / "truth.yaml")
+
+    validate_truth(truth, load_corpus(ROOT / "policies"))
+    assert {s.world_fixture for s in scenarios.scenarios} <= WORLDS.keys()
+    assert {s.case_type for s in scenarios.scenarios} == set(CaseType)
+    assert any(t.should_escalate for t in truth.truths)
+    assert any(t.action_type is not None for t in truth.truths)
+
+
+def test_truth_citing_another_policy_version_is_rejected() -> None:
+    corpus = load_corpus(ROOT / "policies")
+    stale = TruthSet(version=1, truths=(_truth(required_citations={"payout_v11_section_4_3"}),))
+
+    with pytest.raises(TruthLabelError, match="citations not in"):
+        validate_truth(stale, corpus)

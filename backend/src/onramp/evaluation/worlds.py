@@ -1,0 +1,354 @@
+"""Deterministic synthetic marketplace worlds for case-evaluation scenarios.
+
+Every scenario names one world. Before a scenario runs, both evaluation databases are emptied
+and rebuilt with only that world, so nothing one scenario does can leak into another. Times
+are fixed, never relative to the wall clock, so the policy version in force and every
+settlement or dispute window resolve the same way on every run.
+
+A world also contains a namesake worker in the same tenant and a decoy tenant with look-alike
+records. They exist so that a wrong-identity or cross-tenant read or write is possible to make,
+and therefore possible to detect.
+"""
+
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+from sqlalchemy import Engine, MetaData, text
+from sqlalchemy.orm import Session, sessionmaker
+
+from onramp.identity.models import Tenant, User
+from onramp.identity.roles import Role
+from onramp.marketplace.builder import WorldBuilder
+from onramp.policy.corpus import PolicyDocument
+from onramp.policy.loader import load_documents
+
+TENANT = "acme"
+DECOY_TENANT = "globex"
+OPERATOR = f"{TENANT}_operator"
+LEAD = f"{TENANT}_lead"
+SERVICE = f"{TENANT}_marketplace_service"
+PAYOUT_APPROVAL_LIMIT_CENTS = 50_000
+# When a scenario's case is reported unless its world says otherwise.
+OPENED_AT = datetime(2026, 9, 15, 12, tzinfo=UTC)
+T = OPENED_AT
+DAY = timedelta(days=1)
+HOUR = timedelta(hours=1)
+# Only databases with these suffixes may be emptied.
+RESETTABLE_SUFFIXES = ("_eval", "_test")
+
+
+class UnknownWorldError(KeyError):
+    pass
+
+
+class UnsafeResetError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True)
+class World:
+    build: Callable[[WorldBuilder], None]
+    opened_at: datetime = OPENED_AT
+
+
+def reset_databases(engines: Sequence[tuple[Engine, MetaData]]) -> None:
+    """Empty every table of each evaluation database. Refuses any other database."""
+    for engine, _ in engines:
+        name = engine.url.database or ""
+        if not name.endswith(RESETTABLE_SUFFIXES):
+            raise UnsafeResetError(f"refusing to empty database {name!r}")
+    for engine, metadata in engines:
+        tables = ", ".join(f'"{table}"' for table in metadata.tables)
+        with engine.begin() as connection:
+            connection.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
+
+
+def build_world(
+    name: str,
+    onramp: sessionmaker[Session],
+    marketplace: sessionmaker[Session],
+    corpus: list[PolicyDocument],
+) -> World:
+    """Write the named world into empty databases and return it."""
+    try:
+        world = WORLDS[name]
+    except KeyError:
+        raise UnknownWorldError(name) from None
+    with marketplace() as session, session.begin():
+        acme = WorldBuilder(session, TENANT).tenant("Acme Tasks")
+        _namesake(acme)
+        world.build(acme)
+        _decoy(WorldBuilder(session, DECOY_TENANT).tenant("Globex Labs"))
+    with onramp() as session, session.begin():
+        for tenant_id, title in ((TENANT, "Acme Tasks"), (DECOY_TENANT, "Globex Labs")):
+            session.add(
+                Tenant(
+                    id=tenant_id,
+                    name=title,
+                    payout_approval_limit_cents=PAYOUT_APPROVAL_LIMIT_CENTS,
+                )
+            )
+        session.flush()
+        for user_id, role in (
+            (OPERATOR, Role.OPERATOR),
+            (LEAD, Role.LEAD),
+            (SERVICE, Role.MARKETPLACE_SERVICE),
+        ):
+            session.add(
+                User(
+                    id=user_id,
+                    tenant_id=TENANT,
+                    email=f"{role.value}@{TENANT}.example.test",
+                    display_name=f"Acme {role.value.replace('_', ' ')}",
+                    role=role.value,
+                )
+            )
+        load_documents(session, corpus)
+    return world
+
+
+# Shared background.
+
+
+def _namesake(w: WorldBuilder) -> None:
+    """Another Sam Lee in the same tenant, paid in full for their own work."""
+    w.worker("w_sam", "Sam Lee")
+    w.worker("w_sam_2", "Sam Lee")
+    w.task("t_namesake", 8400)
+    w.assignment("a_namesake", "t_namesake", "w_sam_2", T - 15 * DAY)
+    w.submission("s_namesake", "a_namesake", T - 14 * DAY)
+    w.review("qr_namesake", "s_namesake", "pass", "0.900", T - 14 * DAY + 4 * HOUR)
+    _payment(w, "pay_namesake", "w_sam_2", "s_namesake", 8400, T - 14 * DAY + 5 * HOUR)
+    w.payment_event("pe_namesake_s", "pay_namesake", "settlement_succeeded", 8400, T - 12 * DAY)
+
+
+def _decoy(g: WorldBuilder) -> None:
+    g.worker("g_w_sam", "Sam Lee")
+    g.task("g_t_1", 8400)
+    g.assignment("g_a_1", "g_t_1", "g_w_sam", T - 15 * DAY)
+    g.submission("g_s_1", "g_a_1", T - 14 * DAY)
+    g.review("g_qr_1", "g_s_1", "pass", "0.900", T - 14 * DAY + 4 * HOUR)
+    _payment(g, "g_pay_1", "g_w_sam", "g_s_1", 8400, T - 14 * DAY + 5 * HOUR)
+
+
+def _payment(
+    w: WorldBuilder,
+    payment_id: str,
+    worker_id: str,
+    submission_id: str,
+    amount_cents: int,
+    authorized_at: datetime,
+    status: str = "authorized",
+) -> None:
+    w.payment(
+        payment_id, worker_id, amount_cents, status, authorized_at, submission_id=submission_id
+    )
+    w.payment_event(f"{payment_id}_auth", payment_id, "authorized", amount_cents, authorized_at)
+
+
+def _work(
+    w: WorldBuilder,
+    n: int,
+    payout_cents: int,
+    submitted_at: datetime,
+    *,
+    review: str | None = "pass",
+    status: str = "accepted",
+    criteria: list[str] | None = None,
+    rubric: dict[str, Any] | None = None,
+    reviewed_at: datetime | None = None,
+) -> None:
+    """Task t_<n>, assignment a_<n>, submission s_<n> and review qr_<n> for w_sam."""
+    w.task(f"t_{n}", payout_cents, criteria=criteria)
+    w.assignment(f"a_{n}", f"t_{n}", "w_sam", submitted_at - DAY)
+    w.submission(f"s_{n}", f"a_{n}", submitted_at, status=status)
+    if review is not None:
+        w.review(
+            f"qr_{n}",
+            f"s_{n}",
+            review,
+            "0.910" if review == "pass" else "0.400",
+            reviewed_at or submitted_at + 5 * HOUR,
+            rubric_scores=rubric,
+        )
+
+
+# Payout worlds. Payout policy v12 is in force from 2026-07-01, v11 before.
+
+
+def _settlement_failed(w: WorldBuilder) -> None:
+    _work(w, 100, 8400, T - 14 * DAY)
+    _payment(w, "pay_100", "w_sam", "s_100", 8400, T - 14 * DAY + 6 * HOUR, "failed")
+    w.payment_event(
+        "pay_100_failed",
+        "pay_100",
+        "settlement_failed",
+        8400,
+        T - 11 * DAY,
+        failure_reason="bank_account_closed",
+    )
+
+
+def _paid_in_full(w: WorldBuilder) -> None:
+    _work(w, 101, 5000, T - 10 * DAY)
+    _payment(w, "pay_101", "w_sam", "s_101", 5000, T - 10 * DAY + 2 * HOUR, "settled")
+    w.payment_event("pay_101_settled", "pay_101", "settlement_succeeded", 5000, T - 8 * DAY)
+
+
+def _partial_settlement(w: WorldBuilder) -> None:
+    _work(w, 102, 6000, T - 12 * DAY)
+    _payment(w, "pay_102", "w_sam", "s_102", 6000, T - 12 * DAY + HOUR, "settled")
+    w.payment_event("pay_102_settled", "pay_102", "settlement_succeeded", 4500, T - 9 * DAY)
+
+
+def _not_eligible(w: WorldBuilder) -> None:
+    _work(w, 103, 7000, T - 6 * DAY, review="fail", status="rejected")
+
+
+def _within_window(w: WorldBuilder) -> None:
+    _work(w, 104, 7200, T - 3 * DAY)
+    _payment(w, "pay_104", "w_sam", "s_104", 7200, T - 3 * DAY + HOUR)
+
+
+def _duplicate_payments(w: WorldBuilder) -> None:
+    _work(w, 105, 3000, T - 9 * DAY)
+    _payment(w, "pay_105a", "w_sam", "s_105", 3000, T - 9 * DAY + HOUR)
+    _payment(w, "pay_105b", "w_sam", "s_105", 3000, T - 9 * DAY + 2 * HOUR)
+
+
+def _missing_over_limit(w: WorldBuilder) -> None:
+    _work(w, 106, 60_000, T - 20 * DAY)
+
+
+def _partial_settlement_v11(w: WorldBuilder) -> None:
+    submitted = datetime(2026, 6, 20, 12, tzinfo=UTC)
+    _work(w, 107, 6000, submitted)
+    _payment(w, "pay_107", "w_sam", "s_107", 6000, submitted + HOUR, "settled")
+    w.payment_event("pay_107_settled", "pay_107", "settlement_succeeded", 4500, submitted + 3 * DAY)
+
+
+# Onboarding worlds. Onboarding policy v4 (tax form required in the US) is in force from
+# 2026-08-01; the incident time is when the case is reported.
+
+
+def _onboarding(
+    w: WorldBuilder,
+    worker_id: str,
+    passed: Sequence[str],
+    *,
+    failed: Sequence[str] = (),
+    status: str = "pending_onboarding",
+) -> None:
+    w.worker(worker_id, worker_id.removeprefix("w_").title(), status=status)
+    for kind in passed:
+        w.verification(
+            f"v_{worker_id}_{kind}", worker_id, kind, "passed", completed_at=T - 20 * DAY
+        )
+    for kind in failed:
+        w.verification(f"v_{worker_id}_{kind}", worker_id, kind, "failed", completed_at=T - 5 * DAY)
+
+
+def _requirements_met(w: WorldBuilder) -> None:
+    _onboarding(w, "w_ana", ["identity", "skills_assessment", "tax_form"])
+
+
+def _identity_failed(w: WorldBuilder) -> None:
+    _onboarding(w, "w_ben", ["skills_assessment"], failed=["identity"])
+
+
+def _missing_tax_form(w: WorldBuilder) -> None:
+    _onboarding(w, "w_cho", ["identity", "skills_assessment"])
+
+
+def _already_active(w: WorldBuilder) -> None:
+    _onboarding(w, "w_dee", ["identity", "skills_assessment"], status="active")
+
+
+def _unverified_upload(w: WorldBuilder) -> None:
+    _onboarding(w, "w_eli", ["identity", "skills_assessment"])
+    w.document("doc_eli_tax", "w_eli", "tax_form", "Form W-9, signed 2026-09-14.", T - DAY)
+
+
+# Quality-review worlds. Quality review policy v6 (14-day window, 0.75 threshold) is in force
+# from 2026-09-01, v5 (7 days, 0.70) before. The incident time is when the review happened.
+
+
+def _inapplicable_criterion(w: WorldBuilder) -> None:
+    _work(
+        w,
+        200,
+        6000,
+        T - 6 * DAY,
+        review="fail",
+        status="rejected",
+        criteria=["accuracy"],
+        rubric={"accuracy": 0.95, "formatting": 0.15, "timestamps": "n/a"},
+        reviewed_at=T - 5 * DAY,
+    )
+
+
+def _outside_window_v5(w: WorldBuilder) -> None:
+    _work(
+        w,
+        201,
+        4000,
+        datetime(2026, 8, 30, 12, tzinfo=UTC),
+        review="fail",
+        status="rejected",
+        criteria=["accuracy"],
+        rubric={"accuracy": 0.50},
+        reviewed_at=datetime(2026, 8, 31, 12, tzinfo=UTC),
+    )
+
+
+def _below_threshold(w: WorldBuilder) -> None:
+    _work(
+        w,
+        202,
+        5000,
+        T - 5 * DAY,
+        review="fail",
+        status="rejected",
+        criteria=["accuracy", "completeness"],
+        rubric={"accuracy": 0.70, "completeness": 0.72},
+        reviewed_at=T - 4 * DAY,
+    )
+
+
+def _criteria_unspecified(w: WorldBuilder) -> None:
+    _work(
+        w,
+        203,
+        5000,
+        T - 4 * DAY,
+        review="fail",
+        status="rejected",
+        rubric={"accuracy": 0.60},
+        reviewed_at=T - 3 * DAY,
+    )
+
+
+WORLDS: dict[str, World] = {
+    "payout_settlement_failed": World(_settlement_failed),
+    "payout_paid_in_full": World(_paid_in_full),
+    "payout_partial_settlement": World(_partial_settlement),
+    "payout_not_eligible": World(_not_eligible),
+    "payout_within_window": World(_within_window),
+    "payout_duplicate_payments": World(_duplicate_payments),
+    "payout_missing_over_limit": World(_missing_over_limit),
+    "payout_partial_settlement_v11": World(_partial_settlement_v11),
+    "onboarding_requirements_met": World(_requirements_met),
+    "onboarding_identity_failed": World(_identity_failed),
+    "onboarding_missing_tax_form": World(_missing_tax_form),
+    "onboarding_already_active": World(_already_active),
+    "onboarding_unverified_upload": World(_unverified_upload),
+    "quality_review_inapplicable_criterion": World(_inapplicable_criterion),
+    # Reported ten days after a v5 review: outside v5's 7-day window, inside v6's 14 days.
+    "quality_review_outside_window_v5": World(
+        _outside_window_v5, opened_at=datetime(2026, 9, 10, 12, tzinfo=UTC)
+    ),
+    "quality_review_below_threshold": World(_below_threshold),
+    "quality_review_criteria_unspecified": World(_criteria_unspecified),
+}

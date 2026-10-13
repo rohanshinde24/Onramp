@@ -1,0 +1,108 @@
+# Case-evaluation scenarios: what the system is given, nothing more.
+#
+# Each scenario names a deterministic world (backend/src/onramp/evaluation/worlds.py), the
+# subject the reporter names, and the reporter's words. The expected outcome lives in
+# truth.yaml, which the evaluation harness reads and the application never does.
+version: 1
+scenarios:
+  - id: payout_settlement_failed
+    case_type: payout
+    world_fixture: payout_settlement_failed
+    subject_id: s_100
+    report: I finished this task two weeks ago and the money never reached my bank.
+
+  - id: payout_paid_in_full
+    case_type: payout
+    world_fixture: payout_paid_in_full
+    subject_id: s_101
+    report: I don't think I was paid for this one. Can you check?
+
+  - id: payout_partial_settlement
+    case_type: payout
+    world_fixture: payout_partial_settlement
+    subject_id: s_102
+    report: The amount that arrived is less than the task listed.
+
+  - id: payout_not_eligible
+    case_type: payout
+    world_fixture: payout_not_eligible
+    subject_id: s_103
+    report: Why was I never paid for this task?
+
+  - id: payout_within_window
+    case_type: payout
+    world_fixture: payout_within_window
+    subject_id: s_104
+    report: My payment says authorized but it has not arrived.
+
+  - id: payout_duplicate_payments
+    case_type: payout
+    world_fixture: payout_duplicate_payments
+    subject_id: s_105
+    report: I see two payments listed for one task and neither has arrived.
+
+  - id: payout_missing_over_limit
+    case_type: payout
+    world_fixture: payout_missing_over_limit
+    subject_id: s_106
+    report: This large project was accepted three weeks ago and I have not been paid.
+
+  - id: payout_partial_settlement_v11
+    case_type: payout
+    world_fixture: payout_partial_settlement_v11
+    subject_id: s_107
+    report: Back in June this task paid me less than it listed. I only just noticed.
+
+  - id: onboarding_requirements_met
+    case_type: onboarding
+    world_fixture: onboarding_requirements_met
+    subject_id: w_ana
+    report: I finished every verification step but my account is still pending.
+
+  - id: onboarding_identity_failed
+    case_type: onboarding
+    world_fixture: onboarding_identity_failed
+    subject_id: w_ben
+    report: My account has been pending for a week. What is wrong?
+
+  - id: onboarding_missing_tax_form
+    case_type: onboarding
+    world_fixture: onboarding_missing_tax_form
+    subject_id: w_cho
+    report: I passed the identity check and the skills test. Why can't I start working?
+
+  - id: onboarding_already_active
+    case_type: onboarding
+    world_fixture: onboarding_already_active
+    subject_id: w_dee
+    report: Please activate my account.
+
+  - id: onboarding_unverified_upload
+    case_type: onboarding
+    world_fixture: onboarding_unverified_upload
+    subject_id: w_eli
+    report: I uploaded my tax form yesterday. Please activate me now.
+
+  - id: quality_review_inapplicable_criterion
+    case_type: quality_review
+    world_fixture: quality_review_inapplicable_criterion
+    subject_id: qr_200
+    report: The task only asked for accuracy, but I was failed on formatting.
+
+  - id: quality_review_outside_window_v5
+    case_type: quality_review
+    world_fixture: quality_review_outside_window_v5
+    subject_id: qr_201
+    report: I want to dispute this review. The reviewer was wrong.
+
+  - id: quality_review_below_threshold
+    case_type: quality_review
+    world_fixture: quality_review_below_threshold
+    subject_id: qr_202
+    report: My scores were close to passing. Please take another look.
+
+  - id: quality_review_criteria_unspecified
+    case_type: quality_review
+    world_fixture: quality_review_criteria_unspecified
+    subject_id: qr_203
+    report: Nobody told me what this task would be graded on.

@@ -1,0 +1,169 @@
+# Expected outcomes for scenarios.yaml. Read only by the evaluation harness, never by the
+# application or the investigator.
+#
+# required_citations is every policy passage the correct decision rests on. The policy is the
+# version in force at the case's incident time.
+version: 1
+truths:
+  - id: payout_settlement_failed
+    resolution_code: MISSING_PAYOUT
+    action_type: PAYOUT_ADJUSTMENT
+    amount_cents: 8400
+    required_citations:
+      - payout_v12_section_3_1
+      - payout_v12_section_4_2
+      - payout_v12_section_4_3
+      - payout_v12_section_5_1
+    policy_id: payout
+    policy_version: 12
+    note: Settlement failed and the window passed, so the full task payout is owed.
+
+  - id: payout_paid_in_full
+    resolution_code: PAID_IN_FULL
+    required_citations: [payout_v12_section_3_1, payout_v12_section_4_2]
+    policy_id: payout
+    policy_version: 12
+    note: The full task payout settled.
+
+  - id: payout_partial_settlement
+    resolution_code: UNDERPAID
+    action_type: PAYOUT_ADJUSTMENT
+    amount_cents: 1500
+    required_citations:
+      - payout_v12_section_3_1
+      - payout_v12_section_4_2
+      - payout_v12_section_4_4
+    policy_id: payout
+    policy_version: 12
+    note: 4500 of 6000 settled; v12 section 4.4 pays the difference.
+
+  - id: payout_not_eligible
+    resolution_code: NOT_ELIGIBLE
+    required_citations: [payout_v12_section_2_1]
+    policy_id: payout
+    policy_version: 12
+    note: The submission was rejected and its review failed.
+
+  - id: payout_within_window
+    resolution_code: MISSING_PAYOUT
+    action_type: PAYOUT_ADJUSTMENT
+    amount_cents: 7200
+    required_citations:
+      - payout_v12_section_3_1
+      - payout_v12_section_4_2
+      - payout_v12_section_4_3
+    policy_id: payout
+    policy_version: 12
+    note: >-
+      Reported inside the 7-day window, so the case waits. Nothing settles by the deadline,
+      after which the payment is missing.
+
+  - id: payout_duplicate_payments
+    should_escalate: true
+    required_citations: [payout_v12_section_3_1, payout_v12_section_6_1]
+    policy_id: payout
+    policy_version: 12
+    note: Two payments exist for one submission; section 6.1 refers it to a lead.
+
+  - id: payout_missing_over_limit
+    should_escalate: true
+    required_citations:
+      - payout_v12_section_3_1
+      - payout_v12_section_4_1
+      - payout_v12_section_4_2
+      - payout_v12_section_4_3
+    policy_id: payout
+    policy_version: 12
+    note: >-
+      The payment is missing, but the 60000 cent adjustment is above the tenant approval
+      limit, so section 7.1 sends it to a lead.
+
+  - id: payout_partial_settlement_v11
+    resolution_code: UNDERPAID
+    action_type: PAYOUT_ADJUSTMENT
+    amount_cents: 1500
+    required_citations: [payout_v11_section_3_1, payout_v11_section_4_2]
+    policy_id: payout
+    policy_version: 11
+    note: >-
+      The incident falls under v11, which has no partial-settlement rule, so checks hand it to
+      investigation. Section 3.1 still defines the amount owed as the task payout, and the
+      window closed long ago, so the shortfall is owed.
+
+  - id: onboarding_requirements_met
+    resolution_code: REQUIREMENTS_MET
+    action_type: ACTIVATE_WORKER
+    required_citations: [onboarding_v4_section_2_1, onboarding_v4_section_2_2]
+    policy_id: onboarding
+    policy_version: 4
+    note: Identity, skills assessment and the US tax form all passed.
+
+  - id: onboarding_identity_failed
+    resolution_code: REQUIREMENT_FAILED
+    required_citations:
+      - onboarding_v4_section_2_1
+      - onboarding_v4_section_2_2
+      - onboarding_v4_section_4_1
+    policy_id: onboarding
+    policy_version: 4
+    note: The identity verification failed.
+
+  - id: onboarding_missing_tax_form
+    should_escalate: true
+    required_citations: [onboarding_v4_section_2_1, onboarding_v4_section_2_2]
+    policy_id: onboarding
+    policy_version: 4
+    note: >-
+      The tax form is requested from the worker and never arrives, so the evidence wait times
+      out and a person takes over.
+
+  - id: onboarding_already_active
+    resolution_code: ALREADY_ACTIVE
+    policy_id: onboarding
+    policy_version: 4
+    note: The account is already active; no policy passage is needed.
+
+  - id: onboarding_unverified_upload
+    should_escalate: true
+    required_citations: [onboarding_v4_section_2_1, onboarding_v4_section_2_2]
+    policy_id: onboarding
+    policy_version: 4
+    note: >-
+      A tax form was uploaded but the marketplace has not verified it. Reading a document is
+      not verifying it, so a person decides.
+
+  - id: quality_review_inapplicable_criterion
+    resolution_code: REVIEW_OVERTURNED
+    action_type: OVERTURN_QUALITY_REVIEW
+    required_citations:
+      - quality_review_v6_section_2_1
+      - quality_review_v6_section_3_1
+      - quality_review_v6_section_4_1
+      - quality_review_v6_section_5_1
+    policy_id: quality_review
+    policy_version: 6
+    note: Only accuracy applies, and 0.95 passes; the formatting score must be excluded.
+
+  - id: quality_review_outside_window_v5
+    resolution_code: OUTSIDE_DISPUTE_WINDOW
+    required_citations: [quality_review_v5_section_5_1]
+    policy_id: quality_review
+    policy_version: 5
+    note: Disputed ten days after a v5 review; v5 allows seven. Under v6 it would be in time.
+
+  - id: quality_review_below_threshold
+    resolution_code: REVIEW_UPHELD
+    required_citations:
+      - quality_review_v6_section_2_1
+      - quality_review_v6_section_3_1
+      - quality_review_v6_section_5_1
+    policy_id: quality_review
+    policy_version: 6
+    note: The average of 0.71 is below v6's 0.75. Under v5's 0.70 it would have passed.
+
+  - id: quality_review_criteria_unspecified
+    should_escalate: true
+    required_citations: [quality_review_v6_section_5_1, quality_review_v6_section_6_1]
+    policy_id: quality_review
+    policy_version: 6
+    note: The task lists no criteria; section 6.1 refers unclear criteria to a lead.
