@@ -40,6 +40,9 @@ every event for one case lands on one partition in order.
 
 * Delivery is at least once. A consumer may see an event more than once and must be
   idempotent; it must not rely on exactly-once delivery.
+* The publisher does not guarantee per-key order: a failed message is retried later while
+  newer messages for the same key may already have been sent, and several publishers can run
+  at once. `aggregate_version` is the ordering contract, not arrival order.
 * Order holds only within one aggregate. Consumers that care compare `aggregate_version` to
   the last version they applied and ignore older or equal versions.
 * Events are notifications. A consumer that needs current state reads it from the owner.
