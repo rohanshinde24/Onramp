@@ -1,7 +1,7 @@
 BACKEND := backend
 PY := $(BACKEND)/.venv/bin
 
-.PHONY: install lint format typecheck test test-integration check up down api-image migrate
+.PHONY: install lint format typecheck test test-integration check up down api-image migrate seed
 
 install:
 	python3.13 -m venv $(BACKEND)/.venv
@@ -35,3 +35,6 @@ api-image:
 
 migrate:
 	$(PY)/onramp-migrate
+
+seed:
+	$(PY)/onramp-seed
