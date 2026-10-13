@@ -91,6 +91,7 @@ jobs:
           onramp-case-eval --suite adversarial-eval
           --scenarios ../eval/adversarial/scenarios.yaml --truth ../eval/adversarial/truth.yaml
           --scripts ../eval/adversarial/investigations.yaml
+          --reviewers ../eval/adversarial/reviewers.yaml
       - uses: actions/upload-artifact@v4
         if: always()
         with:

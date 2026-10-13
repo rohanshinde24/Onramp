@@ -30,9 +30,11 @@ from onramp.config import AppEnv, get_settings
 from onramp.db import migrate
 from onramp.db.engine import make_engine, make_session_factory
 from onramp.evaluation.report import LIMITATIONS, gate_failures, git_state, run_cases
-from onramp.evaluation.runner import CaseEvaluationRunner, CaseServices, VirtualClock
+from onramp.evaluation.reviewers import honest_reviewers, load_reviewers
+from onramp.evaluation.runner import CaseEvaluationRunner
 from onramp.evaluation.scenarios import load_scenarios, validate_truth
 from onramp.evaluation.scripted import KeywordPolicyRetriever, load_scripts
+from onramp.evaluation.services import CaseServices, VirtualClock
 from onramp.evaluation.worlds import reset_databases
 from onramp.investigations.service import InvestigationService
 from onramp.marketplace.reader import SqlMarketplaceReader
@@ -56,9 +58,11 @@ def build_services(
     writer = writer or SqlMarketplaceWriter(marketplace, clock)
     checks = CheckService(onramp, reader, EvidenceRequester(writer), clock)
     investigations = InvestigationService(onramp, reader, retriever, model, clock=clock)
+    action_gateway = gateway(onramp, reader, writer, clock)
     return CaseServices(
         cases=CaseService(onramp, reader, clock),
-        workflow=WorkflowActivities(onramp, checks, gateway(onramp, reader, writer, clock), clock),
+        workflow=WorkflowActivities(onramp, checks, action_gateway, clock),
+        gateway=action_gateway,
         agent=AgentActivities(onramp, investigations),
         proposals=ProposalService(onramp, clock),
         approvals=ApprovalService(onramp, clock),
@@ -86,6 +90,9 @@ def main() -> None:
     parser.add_argument("--scenarios", type=Path, default=CASES / "scenarios.yaml")
     parser.add_argument("--truth", type=Path, default=CASES / "truth.yaml")
     parser.add_argument("--scripts", type=Path, default=CASES / "investigations.yaml")
+    parser.add_argument(
+        "--reviewers", type=Path, help="scenario -> reviewer behavior; honest when omitted"
+    )
     parser.add_argument("--min-outcome-accuracy", type=float, default=1.0)
     parser.add_argument(
         "--suite",
@@ -119,6 +126,7 @@ def main() -> None:
         lambda clock, model: build_services(onramp, marketplace, retriever, clock, model),
         corpus,
         scripts.model_for,
+        reviewers=load_reviewers(args.reviewers) if args.reviewers else honest_reviewers,
     )
 
     started = datetime.now(UTC)
@@ -134,7 +142,9 @@ def main() -> None:
                 ("scenarios", args.scenarios),
                 ("truth", args.truth),
                 ("scripts", args.scripts),
+                ("reviewers", args.reviewers),
             )
+            if path is not None
         },
         "started_at": started.isoformat(),
         "git_commit": commit,
@@ -145,7 +155,7 @@ def main() -> None:
         "model": scripts.model_name,
         "prompt_version": PROMPT_VERSION,
         "retriever": "keyword_in_force",
-        "reviewer": "scripted: accepts and approves as shown",
+        "reviewer": "per scenario" if args.reviewers else "honest: accepts and approves as shown",
         "limitations": list(LIMITATIONS),
     }
     outcome = run_cases(runner, scenarios, truth, out, manifest)

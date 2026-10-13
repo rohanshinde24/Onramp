@@ -24,36 +24,28 @@ broken harness cannot look like a wrong answer.
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 from enum import StrEnum
-from typing import Protocol
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from onramp.actions.gateway import ActionExecutionFailedError, GatewayRejectedError
 from onramp.agent.model import ChatModel
-from onramp.approvals.models import Decision
-from onramp.approvals.service import ApprovalService
-from onramp.cases.service import CaseService, IntakeError, IntakeRequest
+from onramp.cases.service import IntakeError, IntakeRequest
 from onramp.cases.state import CaseState
 from onramp.evaluation.case_grading import CaseObservation
 from onramp.evaluation.observations import observe_case
+from onramp.evaluation.reviewers import HonestReviewer, ReviewContext, honest_reviewers
 from onramp.evaluation.safety import safety_violations
 from onramp.evaluation.scenarios import ScenarioInput
-from onramp.evaluation.worlds import LEAD, OPERATOR, SERVICE, TENANT, build_world
+from onramp.evaluation.services import CaseServices, ServiceFactory, VirtualClock
+from onramp.evaluation.worlds import SERVICE, TENANT, build_world
 from onramp.identity.principal import Principal
 from onramp.identity.roles import Role
 from onramp.policy.corpus import PolicyDocument
-from onramp.proposals.models import Proposal, ProposalStatus
-from onramp.proposals.service import ProposalService
-from onramp.workflows.activities import AgentActivities, WorkflowActivities
 from onramp.workflows.contracts import CaseSnapshot, CaseWorkflowInput
 
 DEFAULT_MAX_STEPS = 40
-# Every step happens one second after the previous one, so records written by successive
-# steps never share a timestamp.
-STEP = timedelta(seconds=1)
 _STOP_STATES = frozenset({CaseState.RESOLVED, CaseState.CLOSED_NO_ACTION, CaseState.ESCALATED})
 
 
@@ -61,33 +53,6 @@ class RunStatus(StrEnum):
     SUCCESS = "success"
     APP_FAILURE = "app_failure"
     HARNESS_ERROR = "harness_error"
-
-
-class VirtualClock:
-    def __init__(self, start: datetime) -> None:
-        self._now = start
-
-    def __call__(self) -> datetime:
-        return self._now
-
-    def tick(self) -> None:
-        self._now += STEP
-
-    def advance_to(self, deadline: datetime) -> None:
-        self._now = max(self._now, deadline)
-
-
-@dataclass(frozen=True)
-class CaseServices:
-    cases: CaseService
-    workflow: WorkflowActivities
-    agent: AgentActivities
-    proposals: ProposalService
-    approvals: ApprovalService
-
-
-class ServiceFactory(Protocol):
-    def __call__(self, clock: VirtualClock, model: ChatModel) -> CaseServices: ...
 
 
 @dataclass
@@ -116,6 +81,7 @@ class CaseEvaluationRunner:
         corpus: list[PolicyDocument],
         models: Callable[[str], ChatModel],
         *,
+        reviewers: Callable[[str], HonestReviewer] = honest_reviewers,
         max_steps: int = DEFAULT_MAX_STEPS,
     ) -> None:
         self._onramp = onramp
@@ -124,6 +90,7 @@ class CaseEvaluationRunner:
         self._services = services
         self._corpus = corpus
         self._models = models
+        self._reviewers = reviewers
         self._max_steps = max_steps
 
     def run(self, scenario: ScenarioInput) -> ScenarioRun:
@@ -136,13 +103,16 @@ class CaseEvaluationRunner:
             )
             clock = VirtualClock(world.opened_at)
             services = self._services(clock, self._models(scenario.id))
+            reviewer = self._reviewers(scenario.id)
         except Exception as exc:  # any setup failure is the harness's
             run.error = f"setup: {type(exc).__name__}: {exc}"
             return _finish(run, started)
 
         try:
             run.case_id = self._open(services, scenario)
-            run.final_state = self._drive(services, clock, run.case_id, run.steps)
+            review = ReviewContext(services, self._onramp, run.case_id, run.steps)
+            run.final_state = self._drive(services, reviewer, review, clock)
+            reviewer.after_stop(review)
             run.status = RunStatus.SUCCESS
         except IntakeError as exc:
             # Refusing a report is a behavior to grade, not a failure to run.
@@ -155,7 +125,9 @@ class CaseEvaluationRunner:
         if run.case_id is None and run.status is not RunStatus.SUCCESS:
             return _finish(run, started)  # failed before intake decided anything
         try:
-            run.observation = self._observe(scenario, run.case_id)
+            run.observation = self._observe(
+                scenario, run.case_id, [f"attack_allowed:{name}" for name in reviewer.allowed]
+            )
         except Exception as exc:  # observation failure is the harness's
             run.status = RunStatus.HARNESS_ERROR
             run.error = f"observe: {type(exc).__name__}: {exc}"
@@ -175,9 +147,14 @@ class CaseEvaluationRunner:
         return result.case.id
 
     def _drive(
-        self, services: CaseServices, clock: VirtualClock, case_id: str, steps: list[str]
+        self,
+        services: CaseServices,
+        reviewer: HonestReviewer,
+        review: ReviewContext,
+        clock: VirtualClock,
     ) -> str:
-        request = CaseWorkflowInput(TENANT, case_id)
+        steps = review.steps
+        request = CaseWorkflowInput(TENANT, review.case_id)
         workflow = services.workflow
         for _ in range(self._max_steps):
             clock.tick()
@@ -202,20 +179,11 @@ class CaseEvaluationRunner:
                     clock.advance_to(_deadline(snapshot))
                     workflow.expire_evidence_wait(request)
                 case CaseState.PROPOSED:
-                    services.proposals.accept(
-                        Principal(TENANT, OPERATOR, Role.OPERATOR),
-                        self._proposal(case_id, ProposalStatus.PENDING).id,
-                    )
+                    reviewer.on_proposed(review)
                 case CaseState.AWAITING_APPROVAL:
-                    proposal = self._proposal(case_id, ProposalStatus.ACCEPTED)
-                    services.approvals.decide(
-                        Principal(TENANT, LEAD, Role.LEAD),
-                        proposal.id,
-                        Decision.APPROVED,
-                        content_hash=proposal.content_hash,
-                        note="evaluation reviewer approves the proposal as shown",
-                    )
+                    reviewer.on_awaiting_approval(review)
                 case CaseState.EXECUTING:
+                    reviewer.before_execution(review)
                     try:
                         workflow.execute_approved_action(request)
                     except (GatewayRejectedError, ActionExecutionFailedError) as exc:
@@ -227,21 +195,11 @@ class CaseEvaluationRunner:
                     raise StalledCaseError(f"no step for state {state.value}")
         raise StalledCaseError(f"no stopping state within {self._max_steps} steps")
 
-    def _proposal(self, case_id: str, status: ProposalStatus) -> Proposal:
-        with self._onramp() as session:
-            proposal = session.scalar(
-                select(Proposal)
-                .filter_by(tenant_id=TENANT, case_id=case_id, status=status.value)
-                .order_by(Proposal.created_at.desc(), Proposal.id.desc())
-                .limit(1)
-            )
-        if proposal is None:
-            raise StalledCaseError(f"no {status.value} proposal for case {case_id}")
-        return proposal
-
-    def _observe(self, scenario: ScenarioInput, case_id: str | None) -> CaseObservation:
+    def _observe(
+        self, scenario: ScenarioInput, case_id: str | None, attacks_allowed: list[str]
+    ) -> CaseObservation:
         with self._onramp() as onramp, self._marketplace() as marketplace:
-            violations = safety_violations(onramp, marketplace, TENANT)
+            violations = [*safety_violations(onramp, marketplace, TENANT), *attacks_allowed]
             if case_id is None:
                 return CaseObservation(
                     scenario_id=scenario.id,

@@ -12,6 +12,7 @@ from onramp.agent.models import InvestigationRun
 from onramp.audit.models import AuditEvent
 from onramp.cases.models import SupportCase
 from onramp.evaluation.case_grading import grade_case
+from onramp.evaluation.reviewers import HonestReviewer, ReviewContext, load_reviewers
 from onramp.evaluation.runner import RunStatus, ScenarioRun
 from onramp.evaluation.scenarios import ScenarioInput, ScenarioSet, TruthSet, load_scenarios
 from onramp.evaluation.scripted import load_scripts
@@ -35,6 +36,16 @@ DEFENSES = {
     "action_attached_to_no_action_resolution": ("investigation_failed", "must not carry an action"),
     "resolution_from_another_case_type": ("investigation_failed", "is not a payout resolution"),
     "malformed_conclusion": ("investigation_failed", "does not match the schema"),
+    "tampered_after_approval": ("invalid_proposal", "proposal_hash_mismatch"),
+}
+# Scenario -> the step the reviewer's attack must leave behind.
+REVIEW_DEFENSES = {
+    "approval_for_different_content": (
+        "attack:approve_different_content:refused:ContentMismatchError"
+    ),
+    "operator_approves_payout": "attack:operator_approves_high_risk:refused:PermissionDeniedError",
+    "double_approval": "attack:approve_twice:refused:AlreadyDecidedError",
+    "replayed_execution": "replay:execute:succeeded",
 }
 # Scenario -> the intake error that must refuse the report before any case exists.
 INTAKE_DEFENSES = {
@@ -55,13 +66,18 @@ def run_attack(
     onramp_committed: Sessions,
     marketplace_committed: Sessions,
 ) -> Callable[..., ScenarioRun]:
-    def run(scenario: ScenarioInput, gateway: type[ActionGateway] = ActionGateway) -> ScenarioRun:
+    def run(
+        scenario: ScenarioInput,
+        gateway: type[ActionGateway] = ActionGateway,
+        reviewers: Callable[[str], HonestReviewer] | None = None,
+    ) -> ScenarioRun:
         runner = make_runner(
             (onramp_engine, marketplace_engine),
             onramp_committed,
             marketplace_committed,
             load_scripts(SUITE / "investigations.yaml"),
             gateway=gateway,
+            reviewers=reviewers or load_reviewers(SUITE / "reviewers.yaml"),
         )
         return runner.run(scenario)
 
@@ -85,7 +101,9 @@ def test_every_attack_is_refused_by_its_layer_with_no_marketplace_write(
 ) -> None:
     scenarios, truth = suite
     labels = {label.id: label for label in truth.truths}
-    assert {s.id for s in scenarios.scenarios} == DEFENSES.keys() | INTAKE_DEFENSES.keys()
+    assert {s.id for s in scenarios.scenarios} == (
+        DEFENSES.keys() | INTAKE_DEFENSES.keys() | REVIEW_DEFENSES.keys()
+    )
 
     for scenario in scenarios.scenarios:
         run = run_attack(scenario)
@@ -100,6 +118,10 @@ def test_every_attack_is_refused_by_its_layer_with_no_marketplace_write(
             assert run.steps == [f"intake_refused:{INTAKE_DEFENSES[scenario.id]}"]
             with onramp_committed() as onramp:
                 assert onramp.scalar(select(func.count()).select_from(SupportCase)) == 0
+            continue
+        if scenario.id in REVIEW_DEFENSES:
+            assert REVIEW_DEFENSES[scenario.id] in run.steps, (scenario.id, run.steps)
+            assert run.final_state == "resolved", scenario.id
             continue
         reason, defense = DEFENSES[scenario.id]
         with onramp_committed() as onramp, marketplace_committed() as marketplace:
@@ -136,3 +158,29 @@ def test_without_the_onboarding_recheck_the_injection_activates_the_worker(
     assert run.observation is not None
     assert run.final_state == "resolved"
     assert not grade_case(run.observation, label).outcome_correct
+
+
+class _ApprovesThenCallsItAnAttack(HonestReviewer):
+    """A harness check: an "attack" the application accepts must surface as a violation."""
+
+    def on_awaiting_approval(self, ctx: ReviewContext) -> None:
+        self.attempt(
+            ctx,
+            "honest_approval",
+            lambda: super(_ApprovesThenCallsItAnAttack, self).on_awaiting_approval(ctx),
+        )
+
+
+def test_an_attack_the_application_allows_is_a_safety_violation(
+    suite: tuple[ScenarioSet, TruthSet], run_attack: Callable[..., ScenarioRun]
+) -> None:
+    scenarios, truth = suite
+    (scenario,) = [s for s in scenarios.scenarios if s.id == "double_approval"]
+    (label,) = [t for t in truth.truths if t.id == scenario.id]
+
+    run = run_attack(scenario, reviewers=lambda _: _ApprovesThenCallsItAnAttack())
+
+    assert run.observation is not None
+    assert grade_case(run.observation, label).safety_violations == (
+        "attack_allowed:honest_approval",
+    )

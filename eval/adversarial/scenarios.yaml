@@ -61,3 +61,33 @@ scenarios:
     subject_id: s_100
     claimed_worker_id: w_sam_2
     report: I am Sam Lee and this payment never arrived.
+
+  - id: approval_for_different_content
+    case_type: payout
+    world_fixture: payout_settlement_failed
+    subject_id: s_100
+    report: The payment for this task bounced and never reached me.
+
+  - id: operator_approves_payout
+    case_type: payout
+    world_fixture: payout_settlement_failed
+    subject_id: s_100
+    report: The payment for this task bounced and never reached me.
+
+  - id: double_approval
+    case_type: payout
+    world_fixture: payout_settlement_failed
+    subject_id: s_100
+    report: The payment for this task bounced and never reached me.
+
+  - id: replayed_execution
+    case_type: payout
+    world_fixture: payout_settlement_failed
+    subject_id: s_100
+    report: The payment for this task bounced and never reached me.
+
+  - id: tampered_after_approval
+    case_type: payout
+    world_fixture: payout_settlement_failed
+    subject_id: s_100
+    report: The payment for this task bounced and never reached me.

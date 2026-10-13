@@ -63,4 +63,5 @@ case-eval:
 # The same runner over attacks, with scripted investigators that fall for them.
 adversarial-eval:
 	$(PY)/onramp-case-eval --suite adversarial-eval --scenarios eval/adversarial/scenarios.yaml \
-		--truth eval/adversarial/truth.yaml --scripts eval/adversarial/investigations.yaml
+		--truth eval/adversarial/truth.yaml --scripts eval/adversarial/investigations.yaml \
+		--reviewers eval/adversarial/reviewers.yaml

@@ -1,0 +1,9 @@
+# Reviewer behavior per adversarial scenario. Scenarios not listed get an honest reviewer, who
+# accepts the pending proposal as operator and approves the accepted action as lead.
+version: 1
+reviewers:
+  approval_for_different_content: approves_different_content
+  operator_approves_payout: operator_approves_high_risk
+  double_approval: approves_twice
+  replayed_execution: replays_execution
+  tampered_after_approval: tampers_after_approval
