@@ -1,0 +1,38 @@
+# Local development dependencies. The default profile is PostgreSQL only; other services
+# join through profiles as the phases that need them land.
+name: onramp
+
+services:
+  postgres:
+    image: postgres:16.10
+    environment:
+      POSTGRES_USER: onramp
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-onramp-local}
+      POSTGRES_DB: onramp
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./deploy/postgres/init-databases.sql:/docker-entrypoint-initdb.d/10-databases.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U onramp -d onramp"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  api:
+    profiles: ["app"]
+    build: ./backend
+    environment:
+      APP_ENV: local
+      DATABASE_URL: postgresql+psycopg://onramp:${POSTGRES_PASSWORD:-onramp-local}@postgres:5432/onramp
+      MARKETPLACE_DATABASE_URL: postgresql+psycopg://onramp:${POSTGRES_PASSWORD:-onramp-local}@postgres:5432/marketplace
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    stop_grace_period: 25s
+
+volumes:
+  postgres-data:
