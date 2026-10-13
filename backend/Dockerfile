@@ -17,7 +17,11 @@ ENV PYTHONUNBUFFERED=1 \
     FASTEMBED_CACHE_PATH=/home/onramp/models \
     HF_HUB_OFFLINE=0
 # Bake the embedding model into the image (ADR-011) so no process downloads it at runtime.
-RUN python -c "from onramp.policy.embeddings import FastEmbedder; FastEmbedder()"
+# The model host fails transiently, so the download is retried before the build gives up.
+RUN for attempt in 1 2 3 4; do \
+        python -c "from onramp.policy.embeddings import FastEmbedder; FastEmbedder()" && exit 0; \
+        sleep $((attempt * 15)); \
+    done; exit 1
 ENV HF_HUB_OFFLINE=1
 EXPOSE 8000
 CMD ["onramp-api"]
