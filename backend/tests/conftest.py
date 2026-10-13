@@ -17,5 +17,8 @@ os.environ.setdefault("AUTH_JWT_SECRET", "test-only-signing-key-not-a-secret-012
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     for item in items:
-        if "tests/integration/" in str(item.path):
+        path = str(item.path)
+        if "tests/integration/" in path:
             item.add_marker(pytest.mark.integration)
+        if "tests/kafka/" in path:
+            item.add_marker(pytest.mark.kafka)

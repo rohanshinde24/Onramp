@@ -30,10 +30,29 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U onramp -d onramp"
           --health-interval 2s --health-timeout 3s --health-retries 30
+      kafka:
+        image: apache/kafka:4.1.0
+        env:
+          KAFKA_NODE_ID: "1"
+          KAFKA_PROCESS_ROLES: broker,controller
+          KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+          KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+          KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+          KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+          KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+          KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+          KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+        ports: ["9092:9092"]
+        options: >-
+          --health-cmd "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092"
+          --health-interval 5s --health-timeout 10s --health-retries 30
     env:
       APP_ENV: ci
       DATABASE_URL: postgresql+psycopg://onramp:onramp-ci@localhost:5432/onramp
       MARKETPLACE_DATABASE_URL: postgresql+psycopg://onramp:onramp-ci@localhost:5432/marketplace
+      KAFKA_BOOTSTRAP_SERVERS: localhost:9092
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -48,8 +67,9 @@ jobs:
       - run: ruff format --check .
       - run: lint-imports
       - run: mypy
-      - run: pytest -m "not integration"
-      - run: pytest -m integration
+      - run: pytest -m "not integration and not kafka"
+      - run: pytest -m "integration and not kafka"
+      - run: pytest -m kafka
 
   frontend:
     runs-on: ubuntu-24.04

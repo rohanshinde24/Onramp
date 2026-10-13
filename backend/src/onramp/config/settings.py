@@ -34,6 +34,14 @@ class Settings(BaseSettings):
     auth_issuer: str = "onramp"
     auth_audience: str = "onramp-api"
 
+    # Required only by process roles that produce or consume events.
+    kafka_bootstrap_servers: str | None = None
+    kafka_client_id: str = "onramp"
+    # Bounds how long the outbox publisher holds row locks waiting for broker acks.
+    kafka_delivery_timeout_ms: int = Field(default=15_000, ge=1_000, le=120_000)
+    kafka_topic_partitions: int = Field(default=3, ge=1)
+    kafka_replication_factor: int = Field(default=1, ge=1)
+
     otel_exporter_otlp_endpoint: str | None = None
 
 

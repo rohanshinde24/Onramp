@@ -16,6 +16,7 @@ dependencies = [
     "alembic>=1.20,<2",
     "psycopg[binary]>=3.3,<4",
     "pyjwt>=2.15,<3",
+    "confluent-kafka>=2.16,<3",
     "opentelemetry-api>=1.45,<2",
     "opentelemetry-sdk>=1.45,<2",
     "opentelemetry-exporter-otlp-proto-http>=1.45,<2",
@@ -27,6 +28,7 @@ onramp-api = "onramp.entrypoints.api:main"
 onramp-dev-token = "onramp.entrypoints.dev_token:main"
 onramp-migrate = "onramp.entrypoints.migrate:main"
 onramp-seed = "onramp.entrypoints.seed:main"
+onramp-kafka-topics = "onramp.entrypoints.kafka_topics:main"
 
 [project.optional-dependencies]
 dev = [
@@ -46,6 +48,7 @@ addopts = "-ra --strict-markers"
 filterwarnings = ["error"]
 markers = [
     "integration: needs PostgreSQL or another service from docker compose",
+    "kafka: needs the compose Kafka broker",
 ]
 
 [tool.ruff]
