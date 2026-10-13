@@ -15,6 +15,7 @@ from onramp.events.contracts import (
     serialize_payload,
 )
 from onramp.events.envelope import EventEnvelope, is_after
+from onramp.events.topics import DOMAIN_TOPICS
 
 NOW = datetime(2026, 8, 21, 12, tzinfo=UTC)
 
@@ -115,7 +116,7 @@ def test_added_optional_payload_field_stays_compatible() -> None:
 
 
 def test_every_contract_routes_to_a_known_topic() -> None:
-    assert {c.topic for c in CONTRACTS.values()} <= {"onramp.cases", "onramp.actions"}
+    assert {c.topic for c in CONTRACTS.values()} <= {t.name for t in DOMAIN_TOPICS}
     assert latest_contract("approval.granted").schema_version == 1
 
 

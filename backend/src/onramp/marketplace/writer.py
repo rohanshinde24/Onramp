@@ -20,7 +20,14 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, sessionmaker
 
 from onramp.db.types import new_id
+from onramp.events.contracts import (
+    PaymentAuthorizedV1,
+    PaymentSettledV1,
+    QualityReviewOverturnedV1,
+    WorkerUpdatedV1,
+)
 from onramp.marketplace import models as m
+from onramp.marketplace.events import publish
 from onramp.marketplace.records import (
     DocumentRequestRecord,
     PaymentRecord,
@@ -122,6 +129,30 @@ class SqlMarketplaceWriter:
                         occurred_at=now,
                     )
                 )
+            publish(
+                s,
+                "payment.authorized",
+                tenant_id=tenant_id,
+                aggregate_id=payment.id,
+                payload=PaymentAuthorizedV1(
+                    payment_id=payment.id,
+                    worker_id=worker_id,
+                    submission_id=None,
+                    amount_cents=amount_cents,
+                    currency=currency,
+                ),
+                occurred_at=now,
+            )
+            publish(
+                s,
+                "payment.settled",
+                tenant_id=tenant_id,
+                aggregate_id=payment.id,
+                payload=PaymentSettledV1(
+                    payment_id=payment.id, worker_id=worker_id, amount_cents=amount_cents
+                ),
+                occurred_at=now,
+            )
             return PaymentRecord(
                 id=payment.id,
                 tenant_id=tenant_id,
@@ -146,6 +177,14 @@ class SqlMarketplaceWriter:
             if worker.status not in ("pending_onboarding", "active"):
                 raise RejectedError(f"cannot activate a worker in status {worker.status}")
             worker.status = "active"
+            publish(
+                s,
+                "worker.updated",
+                tenant_id=tenant_id,
+                aggregate_id=worker.id,
+                payload=WorkerUpdatedV1(worker_id=worker.id, status=worker.status),
+                occurred_at=self._clock(),
+            )
             return WorkerRecord(
                 id=worker.id,
                 tenant_id=tenant_id,
@@ -179,6 +218,16 @@ class SqlMarketplaceWriter:
                 raise RejectedError("only a failed review can be overturned")
             review.result = "pass"
             review.overturned_at = self._clock()
+            publish(
+                s,
+                "quality_review.overturned",
+                tenant_id=tenant_id,
+                aggregate_id=review.submission_id,
+                payload=QualityReviewOverturnedV1(
+                    review_id=review.id, submission_id=review.submission_id
+                ),
+                occurred_at=review.overturned_at,
+            )
             return QualityReviewRecord(
                 id=review.id,
                 tenant_id=tenant_id,

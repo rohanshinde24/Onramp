@@ -29,12 +29,17 @@ required) is a new `schema_version`. Consumers park versions they do not support
 |---|---|---|---|
 | `onramp.cases` | Onramp | `case_id` | `case.created`, `case.escalated`, `case.resolved`, `case.closed` |
 | `onramp.actions` | Onramp | `case_id` | `approval.granted`, `approval.rejected` (action results in Phase 11) |
-
-Marketplace topics (`marketplace.payments`, `marketplace.work`, `marketplace.workers`) are
-added with the marketplace producer in Phase 7.
+| `marketplace.payments` | Marketplace | `payment_id` | `payment.authorized`, `payment.settled`, `payment.settlement_failed` |
+| `marketplace.work` | Marketplace | `submission_id` | `quality_review.overturned` |
+| `marketplace.workers` | Marketplace | `worker_id` | `worker.updated`, `evidence.uploaded` |
+| `<topic>.dlq` | Consumers | original key | Parked messages, with `dlq.reason`, `dlq.error`, `dlq.consumer_group` and `dlq.source` headers |
 
 The Kafka key is always `aggregate_id`. All Onramp events use the case as their aggregate, so
 every event for one case lands on one partition in order.
+
+The marketplace writes events to its own outbox in its own database, in the same transaction
+as the change, and they are relayed by a separate publisher process. Onramp consumes them as
+it would a third party's events.
 
 ## Delivery and ordering
 

@@ -25,6 +25,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from onramp.db.base import NAMING_CONVENTION
 from onramp.db.types import created_at_column, id_column
+from onramp.events.models import AggregateSequenceColumns, OutboxEventColumns
 
 
 class MarketplaceBase(DeclarativeBase):
@@ -253,3 +254,12 @@ class WriteRequest(MarketplaceBase):
     request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     result: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = created_at_column()
+
+
+class MarketplaceOutboxEvent(OutboxEventColumns, MarketplaceBase):
+    """The marketplace's own outbox. Its relay is separate from Onramp's, as it would be for
+    a real external system."""
+
+
+class MarketplaceAggregateSequence(AggregateSequenceColumns, MarketplaceBase):
+    pass

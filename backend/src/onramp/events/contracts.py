@@ -54,6 +54,43 @@ class ApprovalRejectedV1(Payload):
     approval_id: str
 
 
+class PaymentAuthorizedV1(Payload):
+    payment_id: str
+    worker_id: str
+    submission_id: str | None
+    amount_cents: int
+    currency: str
+
+
+class PaymentSettledV1(Payload):
+    payment_id: str
+    worker_id: str
+    amount_cents: int
+
+
+class PaymentSettlementFailedV1(Payload):
+    payment_id: str
+    worker_id: str
+    amount_cents: int
+    failure_reason: str
+
+
+class QualityReviewOverturnedV1(Payload):
+    review_id: str
+    submission_id: str
+
+
+class WorkerUpdatedV1(Payload):
+    worker_id: str
+    status: str
+
+
+class EvidenceUploadedV1(Payload):
+    document_id: str
+    worker_id: str
+    document_kind: str
+
+
 @dataclass(frozen=True)
 class Contract:
     event_type: str
@@ -72,6 +109,24 @@ CONTRACTS: dict[tuple[str, int], Contract] = {
         Contract("case.closed", 1, "onramp.cases", "case", CaseClosedV1),
         Contract("approval.granted", 1, "onramp.actions", "case", ApprovalGrantedV1),
         Contract("approval.rejected", 1, "onramp.actions", "case", ApprovalRejectedV1),
+        Contract("payment.authorized", 1, "marketplace.payments", "payment", PaymentAuthorizedV1),
+        Contract("payment.settled", 1, "marketplace.payments", "payment", PaymentSettledV1),
+        Contract(
+            "payment.settlement_failed",
+            1,
+            "marketplace.payments",
+            "payment",
+            PaymentSettlementFailedV1,
+        ),
+        Contract(
+            "quality_review.overturned",
+            1,
+            "marketplace.work",
+            "submission",
+            QualityReviewOverturnedV1,
+        ),
+        Contract("worker.updated", 1, "marketplace.workers", "worker", WorkerUpdatedV1),
+        Contract("evidence.uploaded", 1, "marketplace.workers", "worker", EvidenceUploadedV1),
     ]
 }
 
