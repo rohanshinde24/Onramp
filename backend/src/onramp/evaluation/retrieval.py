@@ -3,6 +3,7 @@
 Metrics are computed deterministically from passage IDs. No model judges relevance.
 """
 
+import random
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -17,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from onramp.policy.applicability import applicable_version
 from onramp.policy.models import Policy, PolicyPassage
-from onramp.policy.search import PolicyRetriever
+from onramp.policy.search import PolicyRetriever, RetrievedPassage
 
 K_VALUES = (1, 3, 5)
 DEPTH = 10
@@ -136,3 +137,30 @@ def summarize(results: Sequence[QueryResult]) -> dict[str, Any]:
 
 def to_record(result: QueryResult) -> dict[str, Any]:
     return asdict(result)
+
+
+class RandomInForceRetriever:
+    """Seeded random ranking of the passages in force: the floor any method must clear.
+
+    After the version filter a query chooses among only a handful of passages, so recall at
+    larger k is high even by chance. Reporting this baseline keeps that visible.
+    """
+
+    def __init__(self, session: Session, seed: int = 7) -> None:
+        self._session = session
+        self._seed = seed
+
+    def search(self, domain: str, at: datetime, query: str, k: int = 5) -> list[RetrievedPassage]:
+        in_force = in_force_versions(self._session, domain, at)
+        passages = [
+            p
+            for p in self._session.scalars(select(PolicyPassage).order_by(PolicyPassage.passage_id))
+            if (p.policy_id, p.version) in in_force
+        ]
+        random.Random(f"{self._seed}:{query}").shuffle(passages)  # noqa: S311 - not security
+        return [
+            RetrievedPassage(
+                p.passage_id, p.policy_id, p.version, p.section, p.heading, p.text, 0.0
+            )
+            for p in passages[:k]
+        ]

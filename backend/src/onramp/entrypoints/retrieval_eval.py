@@ -18,6 +18,7 @@ import onramp.models  # noqa: F401 - every table must be mapped before any sessi
 from onramp.config import get_settings
 from onramp.db.engine import make_engine, make_session_factory, transaction
 from onramp.evaluation.retrieval import (
+    RandomInForceRetriever,
     evaluate,
     load_queries,
     summarize,
@@ -25,8 +26,15 @@ from onramp.evaluation.retrieval import (
     validate_labels,
 )
 from onramp.policy.corpus import load_corpus
+from onramp.policy.embeddings import Embedder, FastEmbedder
 from onramp.policy.loader import load_documents
-from onramp.policy.search import ElasticsearchPolicyRetriever, PolicyRetriever, rebuild_index
+from onramp.policy.search import (
+    DensePolicyRetriever,
+    ElasticsearchPolicyRetriever,
+    HybridPolicyRetriever,
+    PolicyRetriever,
+    rebuild_index,
+)
 
 ROOT = Path(__file__).resolve().parents[4]
 QUERIES = ROOT / "eval" / "retrieval" / "queries.yaml"
@@ -43,6 +51,14 @@ def _git(*args: str) -> str:
     return result.stdout.strip()
 
 
+def _embedder() -> Embedder | None:
+    try:
+        return FastEmbedder()
+    except ImportError:
+        print("embeddings extra not installed: evaluating BM25 only")
+        return None
+
+
 def main() -> None:
     settings = get_settings()
     if not settings.elasticsearch_url:
@@ -56,18 +72,25 @@ def main() -> None:
     client = Elasticsearch(settings.elasticsearch_url)
     with transaction(sessions) as session:
         load_documents(session, load_corpus(ROOT / "policies"))
-    rebuild_index(client, sessions, ALIAS, started)
+    embedder = _embedder()
+    rebuild_index(client, sessions, ALIAS, started, embedder)
     query_set = load_queries(QUERIES)
 
+    bm25 = ElasticsearchPolicyRetriever(client, ALIAS)
     methods: dict[str, PolicyRetriever] = {
-        "bm25": ElasticsearchPolicyRetriever(client, ALIAS),
+        "bm25": bm25,
         "bm25_without_version_filter": ElasticsearchPolicyRetriever(
             client, ALIAS, version_filter=False
         ),
     }
+    if embedder is not None:
+        dense = DensePolicyRetriever(client, ALIAS, embedder)
+        methods["dense"] = dense
+        methods["hybrid_rrf"] = HybridPolicyRetriever(bm25, dense)
     summaries = {}
     with sessions() as session, (out / "results.jsonl").open("w") as results_file:
         validate_labels(session, query_set)
+        methods = {"random_in_force": RandomInForceRetriever(session), **methods}
         for name, retriever in methods.items():
             results = evaluate(session, query_set, name, retriever)
             for result in results:
@@ -83,6 +106,7 @@ def main() -> None:
         "query_set_version": query_set.version,
         "queries": len(query_set.queries),
         "methods": list(methods),
+        "embedding_model": "BAAI/bge-small-en-v1.5" if embedder else None,
     }
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2))
     (out / "summary.json").write_text(json.dumps(summaries, indent=2))
