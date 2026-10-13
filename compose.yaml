@@ -66,6 +66,7 @@ services:
 
   api:
     profiles: ["app"]
+    restart: unless-stopped
     build: ./backend
     environment: *app-env
     ports:
@@ -86,6 +87,7 @@ services:
 
   outbox-publisher:
     profiles: ["app"]
+    restart: unless-stopped
     build: ./backend
     command: ["onramp-outbox-publisher"]
     environment: *app-env
@@ -98,6 +100,7 @@ services:
 
   event-consumer:
     profiles: ["app"]
+    restart: unless-stopped
     build: ./backend
     command: ["onramp-event-consumer"]
     environment: *app-env
@@ -110,6 +113,7 @@ services:
 
   marketplace-relay:
     profiles: ["app"]
+    restart: unless-stopped
     build: ./backend
     command: ["onramp-outbox-publisher", "marketplace"]
     environment: *app-env

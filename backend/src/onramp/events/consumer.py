@@ -26,6 +26,7 @@ from typing import Protocol
 
 from pydantic import ValidationError
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import InterfaceError, OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
 from onramp.events.envelope import EventEnvelope
@@ -33,6 +34,10 @@ from onramp.events.models import ProcessedEvent
 from onramp.telemetry.logging import log_context
 
 log = logging.getLogger(__name__)
+
+# Failures of the consumer's own dependencies. These never park an event: parking is for
+# events that cannot be handled, not for an outage that will pass.
+INFRASTRUCTURE_ERRORS: tuple[type[Exception], ...] = (OperationalError, InterfaceError)
 
 
 @dataclass(frozen=True)
@@ -165,6 +170,10 @@ class ConsumerRunner:
             for attempt in range(1, self._max_attempts + 1):
                 try:
                     return self._apply(envelope)
+                except INFRASTRUCTURE_ERRORS:
+                    # Not the event's fault. Stop without committing the offset; the process
+                    # restarts and the message is redelivered once the dependency is back.
+                    raise
                 except Exception as exc:
                     last_error = f"{type(exc).__name__}: {exc}"[:1000]
                     log.warning(

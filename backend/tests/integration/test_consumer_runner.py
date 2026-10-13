@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 from sqlalchemy import func, select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
 from onramp.audit.models import AuditEvent
@@ -191,3 +192,21 @@ def test_persistent_handler_failure_is_parked_without_effect(
     with sessions() as session:
         row = session.scalars(select(ProcessedEvent)).one()
         assert row.outcome == "parked"
+
+
+class DatabaseDownHandler(AuditingHandler):
+    def handle(self, session: Session, envelope: EventEnvelope) -> None:
+        raise OperationalError("SELECT 1", {}, ConnectionRefusedError("db down"))
+
+
+def test_database_outage_stops_the_consumer_instead_of_parking(
+    sessions: sessionmaker[Session],
+) -> None:
+    source, dlq = FakeSource(), FakeDeadLetters()
+    runner = ConsumerRunner(sessions, source, dlq, DatabaseDownHandler(), sleep=lambda _: None)
+
+    with pytest.raises(OperationalError):
+        runner.process(_message(0))
+
+    assert dlq.parked == []
+    assert source.committed == []  # redelivered after restart
