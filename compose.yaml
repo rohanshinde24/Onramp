@@ -94,5 +94,17 @@ services:
         condition: service_completed_successfully
     stop_grace_period: 30s
 
+  marketplace-relay:
+    profiles: ["app"]
+    build: ./backend
+    command: ["onramp-outbox-publisher", "marketplace"]
+    environment: *app-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      kafka-topics:
+        condition: service_completed_successfully
+    stop_grace_period: 30s
+
 volumes:
   postgres-data:

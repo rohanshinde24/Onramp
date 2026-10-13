@@ -9,6 +9,8 @@ from onramp.events.outbox import OutboxStore, emit
 from onramp.marketplace.models import MarketplaceAggregateSequence, MarketplaceOutboxEvent
 
 MARKETPLACE_OUTBOX = OutboxStore(MarketplaceOutboxEvent, MarketplaceAggregateSequence)
+# The table the marketplace relay reads.
+MARKETPLACE_OUTBOX_TABLE = MarketplaceOutboxEvent
 
 
 def publish(
