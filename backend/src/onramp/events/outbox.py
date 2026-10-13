@@ -4,21 +4,40 @@
 never existed; if it commits, the publisher will eventually deliver it.
 """
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from onramp.db.types import new_id
 from onramp.events.contracts import Payload, latest_contract, serialize_payload
 from onramp.events.envelope import EventEnvelope
-from onramp.events.models import AggregateSequence, OutboxEvent
+from onramp.events.models import (
+    AggregateSequence,
+    AggregateSequenceColumns,
+    OutboxEvent,
+    OutboxEventColumns,
+)
 from onramp.telemetry.logging import current_log_context
 
 
 class ContractMismatchError(TypeError):
     pass
+
+
+@dataclass(frozen=True)
+class OutboxStore:
+    """The outbox and sequence tables of one producing database."""
+
+    # Constructor of the mapped outbox class; typed as a callable because the shared columns
+    # live on a mixin, which mypy does not treat as a mapped constructor.
+    events: Callable[..., OutboxEventColumns]
+    sequences: type[AggregateSequenceColumns]
+
+
+ONRAMP_OUTBOX = OutboxStore(OutboxEvent, AggregateSequence)
 
 
 def emit(
@@ -31,13 +50,14 @@ def emit(
     occurred_at: datetime,
     correlation_id: str | None = None,
     causation_id: str | None = None,
+    store: OutboxStore = ONRAMP_OUTBOX,
 ) -> EventEnvelope:
     contract = latest_contract(event_type)
     if not isinstance(payload, contract.payload):
         raise ContractMismatchError(
             f"{event_type} v{contract.schema_version} expects {contract.payload.__name__}"
         )
-    version = _next_version(session, contract.aggregate_type, aggregate_id)
+    version = _next_version(session, store, contract.aggregate_type, aggregate_id)
     envelope = EventEnvelope(
         event_id=new_id("evt"),
         event_type=event_type,
@@ -52,7 +72,7 @@ def emit(
         payload=serialize_payload(payload),
     )
     session.add(
-        OutboxEvent(
+        store.events(
             event_id=envelope.event_id,
             topic=contract.topic,
             partition_key=envelope.partition_key,
@@ -69,16 +89,19 @@ def emit(
     return envelope
 
 
-def _next_version(session: Session, aggregate_type: str, aggregate_id: str) -> int:
+def _next_version(
+    session: Session, store: OutboxStore, aggregate_type: str, aggregate_id: str
+) -> int:
     # The upsert takes a row lock, so concurrent emitters for one aggregate serialize here.
+    sequences = store.sequences
     statement = (
-        insert(AggregateSequence)
+        insert(sequences)
         .values(aggregate_type=aggregate_type, aggregate_id=aggregate_id, last_version=1)
         .on_conflict_do_update(
             index_elements=["aggregate_type", "aggregate_id"],
-            set_={"last_version": AggregateSequence.last_version + 1},
+            set_={"last_version": sequences.last_version + 1},
         )
-        .returning(AggregateSequence.last_version)
+        .returning(sequences.last_version)
     )
     return int(session.execute(statement).scalar_one())
 
@@ -86,11 +109,3 @@ def _next_version(session: Session, aggregate_type: str, aggregate_id: str) -> i
 def _ambient_correlation_id() -> str:
     context = current_log_context()
     return context.get("correlation_id") or context.get("request_id") or new_id("corr")
-
-
-def unpublished(session: Session) -> list[OutboxEvent]:
-    return list(
-        session.scalars(
-            select(OutboxEvent).where(OutboxEvent.published_at.is_(None)).order_by(OutboxEvent.id)
-        )
-    )

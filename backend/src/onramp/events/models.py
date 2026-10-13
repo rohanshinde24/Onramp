@@ -14,27 +14,31 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, declared_attr, mapped_column
 
 from onramp.db.base import OnrampBase
 from onramp.db.types import ID_LENGTH
 
 
-class OutboxEvent(OnrampBase):
-    """An event committed with the change it describes, waiting to be published (ADR-005)."""
+class OutboxEventColumns:
+    """Columns of a transactional outbox table (ADR-005). Mixed into one table per database
+    that produces events: Onramp's, and the simulated marketplace's."""
 
     __tablename__ = "outbox_event"
-    __table_args__ = (
-        UniqueConstraint("event_id"),
-        UniqueConstraint("aggregate_type", "aggregate_id", "aggregate_version"),
-        # The publisher's claim query reads only unpublished rows that are due.
-        Index(
-            "ix_outbox_event_unpublished",
-            "next_attempt_at",
-            "id",
-            postgresql_where=text("published_at IS NULL"),
-        ),
-    )
+
+    @declared_attr.directive
+    def __table_args__(cls) -> tuple[object, ...]:  # noqa: N805 - declared_attr gets the class
+        return (
+            UniqueConstraint("event_id"),
+            UniqueConstraint("aggregate_type", "aggregate_id", "aggregate_version"),
+            # The publisher's claim query reads only unpublished rows that are due.
+            Index(
+                "ix_outbox_event_unpublished",
+                "next_attempt_at",
+                "id",
+                postgresql_where=text("published_at IS NULL"),
+            ),
+        )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     event_id: Mapped[str] = mapped_column(String(ID_LENGTH), nullable=False)
@@ -59,16 +63,27 @@ class OutboxEvent(OnrampBase):
     last_error: Mapped[str | None] = mapped_column(Text)
 
 
-class AggregateSequence(OnrampBase):
+class AggregateSequenceColumns:
     """Last event version issued per aggregate. Incremented in the emitting transaction, so
-    versions are gap-free per committed transaction order and never reused."""
+    versions are never reused and increase in commit order for each aggregate."""
 
     __tablename__ = "aggregate_sequence"
-    __table_args__ = (PrimaryKeyConstraint("aggregate_type", "aggregate_id"),)
+
+    @declared_attr.directive
+    def __table_args__(cls) -> tuple[object, ...]:  # noqa: N805 - declared_attr gets the class
+        return (PrimaryKeyConstraint("aggregate_type", "aggregate_id"),)
 
     aggregate_type: Mapped[str] = mapped_column(String(32))
     aggregate_id: Mapped[str] = mapped_column(String(ID_LENGTH))
     last_version: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class OutboxEvent(OutboxEventColumns, OnrampBase):
+    pass
+
+
+class AggregateSequence(AggregateSequenceColumns, OnrampBase):
+    pass
 
 
 class ProcessedEvent(OnrampBase):

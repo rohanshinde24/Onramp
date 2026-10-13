@@ -14,7 +14,9 @@ from onramp.telemetry.logging import log_context
 NOW = datetime(2026, 8, 21, tzinfo=UTC)
 
 
-def _escalated(session: Session, case_id: str = "case_1", **kw: str) -> EventEnvelope:
+def _escalated(
+    session: Session, case_id: str = "case_1", correlation_id: str | None = None
+) -> EventEnvelope:
     return emit(
         session,
         event_type="case.escalated",
@@ -22,7 +24,7 @@ def _escalated(session: Session, case_id: str = "case_1", **kw: str) -> EventEnv
         aggregate_id=case_id,
         payload=CaseEscalatedV1(reason="operator_judgment", from_state="investigating"),
         occurred_at=NOW,
-        **kw,
+        correlation_id=correlation_id,
     )
 
 

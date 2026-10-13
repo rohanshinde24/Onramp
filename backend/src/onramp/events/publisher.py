@@ -25,7 +25,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from onramp.events.envelope import EventEnvelope
-from onramp.events.models import OutboxEvent
+from onramp.events.models import OutboxEvent, OutboxEventColumns
 
 log = logging.getLogger(__name__)
 Clock = Callable[[], datetime]
@@ -81,7 +81,9 @@ class OutboxPublisher:
         *,
         batch_size: int = 100,
         clock: Clock = _utcnow,
+        outbox: type[OutboxEventColumns] = OutboxEvent,
     ) -> None:
+        self._outbox = outbox
         self._sessions = sessions
         self._sink = sink
         self._batch_size = batch_size
@@ -90,11 +92,12 @@ class OutboxPublisher:
     def run_once(self) -> CycleStats:
         now = self._clock()
         with self._sessions() as session, session.begin():
+            outbox = self._outbox
             rows = list(
                 session.scalars(
-                    select(OutboxEvent)
-                    .where(OutboxEvent.published_at.is_(None), OutboxEvent.next_attempt_at <= now)
-                    .order_by(OutboxEvent.id)
+                    select(outbox)
+                    .where(outbox.published_at.is_(None), outbox.next_attempt_at <= now)
+                    .order_by(outbox.id)
                     .limit(self._batch_size)
                     .with_for_update(skip_locked=True)
                 )
@@ -132,7 +135,7 @@ class OutboxPublisher:
                 stop.wait(idle_wait_s)
 
 
-def _message(row: OutboxEvent) -> OutboundMessage:
+def _message(row: OutboxEventColumns) -> OutboundMessage:
     envelope = EventEnvelope.model_validate(row.envelope)
     return OutboundMessage(
         event_id=row.event_id,
@@ -149,11 +152,11 @@ class Backlog:
     oldest_age_s: float
 
 
-def outbox_backlog(session: Session, now: datetime) -> Backlog:
+def outbox_backlog(
+    session: Session, now: datetime, outbox: type[OutboxEventColumns] = OutboxEvent
+) -> Backlog:
     count, oldest = session.execute(
-        select(func.count(), func.min(OutboxEvent.created_at)).where(
-            OutboxEvent.published_at.is_(None)
-        )
+        select(func.count(), func.min(outbox.created_at)).where(outbox.published_at.is_(None))
     ).one()
     age = (now - oldest).total_seconds() if oldest is not None else 0.0
     return Backlog(count=int(count), oldest_age_s=max(age, 0.0))
