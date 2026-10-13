@@ -8,7 +8,6 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 
 from onramp.cases.service import CaseService, IntakeRequest
-from onramp.db.base import OnrampBase
 from onramp.evaluation.scenarios import load_scenarios
 from onramp.evaluation.worlds import (
     SERVICE,
@@ -21,7 +20,7 @@ from onramp.evaluation.worlds import (
 )
 from onramp.identity.principal import Principal
 from onramp.identity.roles import Role
-from onramp.marketplace.models import MarketplaceBase, Worker
+from onramp.marketplace.models import Worker
 from onramp.marketplace.reader import SqlMarketplaceReader
 from onramp.policy.corpus import load_corpus
 from onramp.policy.models import PolicyVersion
@@ -36,9 +35,7 @@ def _fixed(at: datetime) -> datetime:
 
 
 def _reset(onramp_engine: Engine, marketplace_engine: Engine) -> None:
-    reset_databases(
-        [(onramp_engine, OnrampBase.metadata), (marketplace_engine, MarketplaceBase.metadata)]
-    )
+    reset_databases(onramp_engine, marketplace_engine)
 
 
 def test_every_committed_scenario_opens_a_case_in_its_own_world(
@@ -96,7 +93,7 @@ def test_reset_refuses_a_database_that_is_not_for_evaluation(onramp_db_url: str)
     engine = create_engine(make_url(onramp_db_url).set(database="onramp"))
     try:
         with pytest.raises(UnsafeResetError):
-            reset_databases([(engine, OnrampBase.metadata)])
+            reset_databases(engine, engine)
     finally:
         engine.dispose()
 

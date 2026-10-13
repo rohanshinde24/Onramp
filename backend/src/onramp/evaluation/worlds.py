@@ -15,12 +15,15 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import Engine, MetaData, text
+from sqlalchemy import Engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
+import onramp.models  # noqa: F401 - every Onramp table is in the metadata being emptied
+from onramp.db.base import OnrampBase
 from onramp.identity.models import Tenant, User
 from onramp.identity.roles import Role
 from onramp.marketplace.builder import WorldBuilder
+from onramp.marketplace.models import MarketplaceBase
 from onramp.policy.corpus import PolicyDocument
 from onramp.policy.loader import load_documents
 
@@ -53,13 +56,14 @@ class World:
     opened_at: datetime = OPENED_AT
 
 
-def reset_databases(engines: Sequence[tuple[Engine, MetaData]]) -> None:
-    """Empty every table of each evaluation database. Refuses any other database."""
-    for engine, _ in engines:
+def reset_databases(onramp: Engine, marketplace: Engine) -> None:
+    """Empty every table of both evaluation databases. Refuses any other database."""
+    pairs = ((onramp, OnrampBase.metadata), (marketplace, MarketplaceBase.metadata))
+    for engine, _ in pairs:
         name = engine.url.database or ""
         if not name.endswith(RESETTABLE_SUFFIXES):
             raise UnsafeResetError(f"refusing to empty database {name!r}")
-    for engine, metadata in engines:
+    for engine, metadata in pairs:
         tables = ", ".join(f'"{table}"' for table in metadata.tables)
         with engine.begin() as connection:
             connection.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))

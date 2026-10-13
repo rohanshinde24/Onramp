@@ -1,5 +1,6 @@
 """The case-evaluation runner over the real services, with known-good and seeded-bad inputs."""
 
+import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -9,9 +10,9 @@ from sqlalchemy import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from onramp.agent.model import ChatModel
-from onramp.db.base import OnrampBase
 from onramp.entrypoints.case_eval import build_services
 from onramp.evaluation.case_grading import CaseGrade, grade_case
+from onramp.evaluation.report import gate_failures, run_cases
 from onramp.evaluation.runner import (
     CaseEvaluationRunner,
     CaseServices,
@@ -22,7 +23,6 @@ from onramp.evaluation.runner import (
 from onramp.evaluation.scenarios import ScenarioInput, ScenarioSet, TruthSet, load_scenarios
 from onramp.evaluation.scripted import KeywordPolicyRetriever, ScriptSet, load_scripts
 from onramp.evaluation.worlds import reset_databases
-from onramp.marketplace.models import MarketplaceBase
 from onramp.marketplace.records import PaymentRecord
 from onramp.marketplace.writer import MarketplaceWriter, SqlMarketplaceWriter
 from onramp.policy.corpus import load_corpus
@@ -59,9 +59,7 @@ def _runner(
     return CaseEvaluationRunner(
         onramp,
         marketplace,
-        lambda: reset_databases(
-            [(engines[0], OnrampBase.metadata), (engines[1], MarketplaceBase.metadata)]
-        ),
+        lambda: reset_databases(*engines),
         services,
         CORPUS,
         scripts.model_for,
@@ -266,3 +264,61 @@ def test_an_unknown_world_is_a_harness_error(run_scenario: Callable[..., Scenari
 
     assert run.status is RunStatus.HARNESS_ERROR
     assert run.observation is None
+
+
+def test_run_writes_manifest_records_and_summary_and_gates_a_bad_run(
+    dataset: tuple[ScenarioSet, TruthSet],
+    onramp_engine: Engine,
+    marketplace_engine: Engine,
+    onramp_committed: Sessions,
+    marketplace_committed: Sessions,
+    tmp_path: Path,
+) -> None:
+    scenarios, truth = dataset
+    subset = ScenarioSet(
+        version=scenarios.version,
+        scenarios=(
+            _scenario(dataset, "payout_paid_in_full"),
+            _scenario(dataset, "payout_partial_settlement_v11"),
+        ),
+    )
+    bad = _with_submit(
+        "payout_partial_settlement_v11", resolution_code="PAID_IN_FULL", proposed_action=None
+    )
+    engines = (onramp_engine, marketplace_engine)
+
+    good = run_cases(
+        _runner(
+            engines,
+            onramp_committed,
+            marketplace_committed,
+            load_scripts(CASES / "investigations.yaml"),
+        ),
+        subset,
+        truth,
+        tmp_path / "good",
+        {"run_id": "good"},
+    )
+    wrong = run_cases(
+        _runner(engines, onramp_committed, marketplace_committed, bad),
+        subset,
+        truth,
+        tmp_path / "bad",
+        {"run_id": "bad"},
+    )
+
+    records = [
+        json.loads(line) for line in (tmp_path / "good" / "results.jsonl").read_text().splitlines()
+    ]
+    assert [r["scenario_id"] for r in records] == [
+        "payout_paid_in_full",
+        "payout_partial_settlement_v11",
+    ]
+    assert all(r["schema_version"] == 1 and r["grade"]["outcome_correct"] for r in records)
+    manifest = json.loads((tmp_path / "good" / "manifest.json").read_text())
+    assert manifest["run_id"] == "good"
+    assert "finished_at" in manifest
+    assert json.loads((tmp_path / "good" / "summary.json").read_text()) == good.summary
+    assert gate_failures(good.summary, 1.0) == []
+    assert wrong.summary["wrong_outcomes"] == ["payout_partial_settlement_v11"]
+    assert gate_failures(wrong.summary, 1.0) == ["outcome accuracy 0.500 < 1.000"]

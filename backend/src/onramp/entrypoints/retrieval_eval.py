@@ -6,8 +6,6 @@ per-query JSONL and a summary.
 """
 
 import json
-import shutil
-import subprocess
 import sys
 from dataclasses import asdict
 from datetime import UTC, datetime
@@ -18,6 +16,7 @@ from elasticsearch import Elasticsearch
 import onramp.models  # noqa: F401 - every table must be mapped before any session is used
 from onramp.config import get_settings
 from onramp.db.engine import make_engine, make_session_factory, transaction
+from onramp.evaluation.report import git_state
 from onramp.evaluation.retrieval import (
     RandomInForceRetriever,
     evaluate,
@@ -48,16 +47,6 @@ COMPARISONS = (
     ("hybrid_rrf", "bm25"),
     ("bm25", "random_in_force"),
 )
-
-
-def _git(*args: str) -> str:
-    git = shutil.which("git")
-    if git is None:
-        return ""
-    result = subprocess.run(  # noqa: S603 - resolved git binary with fixed arguments
-        [git, *args], cwd=ROOT, capture_output=True, text=True, check=False
-    )
-    return result.stdout.strip()
 
 
 def _embedder() -> Embedder | None:
@@ -114,7 +103,7 @@ def main() -> None:
             diff = paired_bootstrap(reciprocal_ranks[better], reciprocal_ranks[worse])
             comparisons[f"mrr {better} - {worse}"] = asdict(diff)
 
-    commit, dirty = _git("rev-parse", "HEAD"), bool(_git("status", "--porcelain"))
+    commit, dirty = git_state(ROOT)
     manifest = {
         "run_id": run_id,
         "started_at": started.isoformat(),

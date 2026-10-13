@@ -1,7 +1,7 @@
 BACKEND := backend
 PY := $(BACKEND)/.venv/bin
 
-.PHONY: install lint format typecheck test test-integration test-kafka test-search check up down api-image migrate seed dlq-replay load-policies retrieval-eval
+.PHONY: install lint format typecheck test test-integration test-kafka test-search check up down api-image migrate seed dlq-replay load-policies retrieval-eval case-eval
 
 install:
 	python3.13 -m venv $(BACKEND)/.venv
@@ -55,3 +55,7 @@ load-policies:
 
 retrieval-eval:
 	$(PY)/onramp-retrieval-eval
+
+# Whole-application case evaluation with scripted investigations. Needs PostgreSQL only.
+case-eval:
+	$(PY)/onramp-case-eval
