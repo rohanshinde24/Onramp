@@ -51,3 +51,29 @@ def onramp_session(onramp_engine: Engine) -> Iterator[Session]:
         finally:
             session.close()
             outer.rollback()
+
+
+@pytest.fixture(scope="session")
+def marketplace_db_url() -> str:
+    url = _recreate_database(str(get_settings().marketplace_database_url))
+    migrate.upgrade("marketplace", url)
+    return url
+
+
+@pytest.fixture(scope="session")
+def marketplace_engine(marketplace_db_url: str) -> Iterator[Engine]:
+    engine = create_engine(marketplace_db_url)
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture
+def marketplace_session(marketplace_engine: Engine) -> Iterator[Session]:
+    with marketplace_engine.connect() as connection:
+        outer = connection.begin()
+        session = Session(bind=connection, join_transaction_mode="create_savepoint")
+        try:
+            yield session
+        finally:
+            session.close()
+            outer.rollback()
