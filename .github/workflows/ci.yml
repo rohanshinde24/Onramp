@@ -85,9 +85,14 @@ jobs:
       - run: pytest -m kafka
       - run: pytest -m search
       # Whole-application case evaluation with scripted investigations; fails on any wrong
-      # outcome, failed run or safety violation.
+      # outcome, failed run or safety violation. Settings require a signing key the
+      # evaluation never uses.
       - run: onramp-case-eval
-      - run: >-
+        env:
+          AUTH_JWT_SECRET: ci-case-evaluation-signing-key-not-a-secret
+      - env:
+          AUTH_JWT_SECRET: ci-case-evaluation-signing-key-not-a-secret
+        run: >-
           onramp-case-eval --suite adversarial-eval
           --scenarios ../eval/adversarial/scenarios.yaml --truth ../eval/adversarial/truth.yaml
           --scripts ../eval/adversarial/investigations.yaml
