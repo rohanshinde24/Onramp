@@ -59,8 +59,8 @@ def seed_marketplace(session: Session, tenant_id: str, start: datetime) -> bool:
         f"{p}pe_9203b", f"{p}pay_9203", "settlement_succeeded", 5000, start + timedelta(days=2)
     )
 
-    # Quality review dispute: failed on a criterion that may not apply.
-    w.task(f"{p}t_8823", 6000, task_type="transcription", criteria=["accuracy", "formatting"])
+    # Quality review dispute: the instructions ask only for accuracy, but formatting was scored.
+    w.task(f"{p}t_8823", 6000, task_type="transcription", criteria=["accuracy"])
     w.assignment(f"{p}a_8823", f"{p}t_8823", f"{p}w_492", start)
     w.submission(f"{p}s_8823", f"{p}a_8823", start + timedelta(hours=5), status="rejected")
     w.review(
