@@ -246,3 +246,8 @@ def rebuild_index(
     for old in previous:
         client.indices.delete(index=old)
     return int(indexed)
+
+
+def default_retriever(client: Elasticsearch, alias: str, embedder: Embedder) -> PolicyRetriever:
+    """The retriever the application uses (ADR-011)."""
+    return DensePolicyRetriever(client, alias, embedder)

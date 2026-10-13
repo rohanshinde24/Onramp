@@ -101,6 +101,21 @@ services:
       kafka:
         condition: service_healthy
 
+  policy-indexer:
+    profiles: ["app"]
+    build: ./backend
+    command: ["sh", "-c", "onramp-load-policies /home/onramp/policies && onramp-policy-indexer"]
+    environment:
+      <<: *app-env
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+    volumes:
+      - ./policies:/home/onramp/policies:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      elasticsearch:
+        condition: service_healthy
+
   outbox-publisher:
     profiles: ["app"]
     restart: unless-stopped
