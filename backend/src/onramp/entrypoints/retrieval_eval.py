@@ -9,6 +9,7 @@ import json
 import shutil
 import subprocess
 import sys
+from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -25,6 +26,7 @@ from onramp.evaluation.retrieval import (
     to_record,
     validate_labels,
 )
+from onramp.evaluation.stats import paired_bootstrap
 from onramp.policy.corpus import load_corpus
 from onramp.policy.embeddings import Embedder, FastEmbedder
 from onramp.policy.loader import load_documents
@@ -39,6 +41,13 @@ from onramp.policy.search import (
 ROOT = Path(__file__).resolve().parents[4]
 QUERIES = ROOT / "eval" / "retrieval" / "queries.yaml"
 ALIAS = "retrieval-eval"
+# Paired MRR comparisons reported with bootstrap confidence intervals.
+COMPARISONS = (
+    ("dense", "bm25"),
+    ("dense", "hybrid_rrf"),
+    ("hybrid_rrf", "bm25"),
+    ("bm25", "random_in_force"),
+)
 
 
 def _git(*args: str) -> str:
@@ -88,6 +97,7 @@ def main() -> None:
         methods["dense"] = dense
         methods["hybrid_rrf"] = HybridPolicyRetriever(bm25, dense)
     summaries = {}
+    reciprocal_ranks: dict[str, dict[str, float]] = {}
     with sessions() as session, (out / "results.jsonl").open("w") as results_file:
         validate_labels(session, query_set)
         methods = {"random_in_force": RandomInForceRetriever(session), **methods}
@@ -96,6 +106,13 @@ def main() -> None:
             for result in results:
                 results_file.write(json.dumps(to_record(result)) + "\n")
             summaries[name] = summarize(results)
+            reciprocal_ranks[name] = {r.query_id: r.reciprocal_rank for r in results}
+
+    comparisons: dict[str, dict[str, float]] = {}
+    for better, worse in COMPARISONS:
+        if better in reciprocal_ranks and worse in reciprocal_ranks:
+            diff = paired_bootstrap(reciprocal_ranks[better], reciprocal_ranks[worse])
+            comparisons[f"mrr {better} - {worse}"] = asdict(diff)
 
     commit, dirty = _git("rev-parse", "HEAD"), bool(_git("status", "--porcelain"))
     manifest = {
@@ -109,13 +126,17 @@ def main() -> None:
         "embedding_model": "BAAI/bge-small-en-v1.5" if embedder else None,
     }
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2))
-    (out / "summary.json").write_text(json.dumps(summaries, indent=2))
+    (out / "summary.json").write_text(
+        json.dumps({"methods": summaries, "comparisons": comparisons}, indent=2)
+    )
 
     columns = ["recall@1", "recall@3", "recall@5", "mrr@10", "top1_stale_rate"]
     print(f"run {run_id}  commit {commit[:8]}  dirty={dirty}")
     print(f"{'method':32}" + "".join(f"{c:>17}" for c in columns))
     for name, summary in summaries.items():
         print(f"{name:32}" + "".join(f"{summary[c]:>17.3f}" for c in columns))
+    for label, ci in comparisons.items():
+        print(f"{label:40} {ci['mean']:+.3f}  95% CI [{ci['low']:+.3f}, {ci['high']:+.3f}]")
     print(f"artifacts: {out.relative_to(ROOT)}")
 
 
