@@ -16,6 +16,11 @@ from onramp.cases.service import (
 )
 from onramp.cases.state import IllegalTransitionError
 from onramp.identity.principal import PermissionDeniedError
+from onramp.proposals.service import (
+    InvalidProposalError,
+    ProposalNotFoundError,
+    ProposalNotPendingError,
+)
 
 _STATUS: dict[type[Exception], tuple[int, str]] = {
     PermissionDeniedError: (status.HTTP_403_FORBIDDEN, "forbidden"),
@@ -27,6 +32,9 @@ _STATUS: dict[type[Exception], tuple[int, str]] = {
     StaleCaseError: (status.HTTP_409_CONFLICT, "stale_case"),
     StaleDataError: (status.HTTP_409_CONFLICT, "stale_case"),
     InvalidCursorError: (status.HTTP_422_UNPROCESSABLE_CONTENT, "invalid_cursor"),
+    InvalidProposalError: (status.HTTP_422_UNPROCESSABLE_CONTENT, "invalid_proposal"),
+    ProposalNotFoundError: (status.HTTP_404_NOT_FOUND, "proposal_not_found"),
+    ProposalNotPendingError: (status.HTTP_409_CONFLICT, "proposal_not_pending"),
 }
 
 

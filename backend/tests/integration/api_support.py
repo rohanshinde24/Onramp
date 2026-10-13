@@ -8,11 +8,15 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from onramp.api.app import create_app
 from onramp.api.services import AppServices, AuthConfig
-from onramp.cases.service import CaseService
+from onramp.audit.service import Actor
+from onramp.cases.models import SupportCase
+from onramp.cases.service import CaseService, transition
+from onramp.cases.state import CaseState
 from onramp.identity.models import Tenant, User
 from onramp.identity.tokens import issue_token
 from onramp.marketplace.builder import WorldBuilder
 from onramp.marketplace.reader import SqlMarketplaceReader
+from onramp.proposals.service import ProposalService
 
 AUTH = AuthConfig("integration-signing-key-0123456789abcdef", "onramp", "onramp-api")
 T0 = datetime(2026, 8, 20, 9, tzinfo=UTC)
@@ -74,9 +78,46 @@ def build_client(
         globex.submission("s_g", "a_g", T0)
 
     reader = SqlMarketplaceReader(marketplace_sessions)
-    cases = (
-        CaseService(onramp_sessions, reader, clock)
-        if clock
-        else CaseService(onramp_sessions, reader)
+    now = clock or (lambda: datetime.now(UTC))
+    services = AppServices(
+        sessions=onramp_sessions,
+        auth=AUTH,
+        cases=CaseService(onramp_sessions, reader, now),
+        proposals=ProposalService(onramp_sessions, now),
     )
-    return TestClient(create_app(AppServices(sessions=onramp_sessions, auth=AUTH, cases=cases)))
+    return TestClient(create_app(services))
+
+
+def open_case(client: TestClient, subject_id: str = "s_1", key: str = "ticket-1") -> str:
+    response = client.post(
+        "/cases",
+        json={
+            "case_type": "payout",
+            "subject_id": subject_id,
+            "intake_key": key,
+            "description": "Not paid",
+        },
+        headers=as_user("usr_svc"),
+    )
+    assert response.status_code in (200, 201), response.text
+    case_id: str = response.json()["case"]["id"]
+    return case_id
+
+
+def move_case(sessions: sessionmaker[Session], case_id: str, *states: CaseState) -> int:
+    """Drive a case through states with the real transition helper; returns the new version.
+
+    Stands in for the checks and workflow that later phases add.
+    """
+    with sessions() as session, session.begin():
+        case = session.get_one(SupportCase, case_id)
+        for state in states:
+            transition(
+                session,
+                case,
+                state,
+                actor=Actor.system(),
+                occurred_at=datetime.now(UTC),
+                reason="test_setup",
+            )
+        return case.version

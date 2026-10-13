@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from sqlalchemy.orm import Session, sessionmaker
 
 from onramp.cases.service import CaseService
+from onramp.proposals.service import ProposalService
 
 
 @dataclass(frozen=True)
@@ -19,3 +20,4 @@ class AppServices:
     sessions: sessionmaker[Session]
     auth: AuthConfig
     cases: CaseService
+    proposals: ProposalService

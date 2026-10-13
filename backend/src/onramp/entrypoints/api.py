@@ -13,6 +13,7 @@ from onramp.config import get_settings
 from onramp.db.engine import make_engine, make_session_factory
 from onramp.db.readiness import database_check
 from onramp.marketplace.reader import SqlMarketplaceReader
+from onramp.proposals.service import ProposalService
 from onramp.telemetry.logging import configure_logging
 from onramp.telemetry.tracing import configure_tracing
 
@@ -32,6 +33,7 @@ def main() -> None:
             audience=settings.auth_audience,
         ),
         cases=CaseService(sessions, SqlMarketplaceReader(make_session_factory(marketplace_engine))),
+        proposals=ProposalService(sessions),
     )
     app = create_app(
         services,
