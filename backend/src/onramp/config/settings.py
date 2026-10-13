@@ -46,6 +46,12 @@ class Settings(BaseSettings):
     elasticsearch_url: str | None = None
     policy_index_alias: str = "policy-passages"
 
+    # Required only by workflow and agent worker roles.
+    temporal_address: str = "127.0.0.1:7233"
+    temporal_namespace: str = "default"
+    temporal_workflow_task_queue: str = "onramp-workflows"
+    temporal_agent_task_queue: str = "onramp-agent"
+
     otel_exporter_otlp_endpoint: str | None = None
 
 
