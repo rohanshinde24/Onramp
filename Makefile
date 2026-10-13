@@ -8,7 +8,7 @@ install:
 	$(PY)/pip install -e '$(BACKEND)[dev]'
 
 lint:
-	cd $(BACKEND) && .venv/bin/ruff check . && .venv/bin/ruff format --check .
+	cd $(BACKEND) && .venv/bin/ruff check . && .venv/bin/ruff format --check . && .venv/bin/lint-imports
 
 format:
 	cd $(BACKEND) && .venv/bin/ruff format . && .venv/bin/ruff check --fix .

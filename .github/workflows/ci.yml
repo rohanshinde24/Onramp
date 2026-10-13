@@ -45,6 +45,7 @@ jobs:
         run: psql "postgresql://onramp:onramp-ci@localhost:5432/onramp" -f ../deploy/postgres/init-databases.sql
       - run: ruff check .
       - run: ruff format --check .
+      - run: lint-imports
       - run: mypy
       - run: pytest -m "not integration"
       - run: pytest -m integration

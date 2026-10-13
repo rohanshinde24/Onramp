@@ -62,3 +62,27 @@ strict = true
 mypy_path = "src"
 files = ["src", "tests"]
 plugins = ["pydantic.mypy"]
+
+[tool.importlinter]
+root_package = "onramp"
+
+[[tool.importlinter.contracts]]
+name = "Marketplace tables are private to the marketplace package (ADR-002)"
+type = "forbidden"
+source_modules = [
+    "onramp.api",
+    "onramp.audit",
+    "onramp.config",
+    "onramp.db",
+    "onramp.entrypoints",
+    "onramp.identity",
+    "onramp.models",
+    "onramp.telemetry",
+]
+forbidden_modules = ["onramp.marketplace.models", "onramp.marketplace.builder"]
+
+[[tool.importlinter.contracts]]
+name = "Foundation modules do not depend on domain modules"
+type = "forbidden"
+source_modules = ["onramp.config", "onramp.db", "onramp.telemetry"]
+forbidden_modules = ["onramp.identity", "onramp.audit", "onramp.marketplace"]
