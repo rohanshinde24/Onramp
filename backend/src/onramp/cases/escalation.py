@@ -14,4 +14,5 @@ class EscalationReason(StrEnum):
     EVIDENCE_TIMEOUT = "evidence_timeout"
     INVESTIGATION_FAILED = "investigation_failed"
     INVALID_PROPOSAL = "invalid_proposal"
+    ACTION_EXECUTION_FAILED = "action_execution_failed"
     POSTCONDITION_FAILED = "postcondition_failed"
