@@ -6,41 +6,47 @@ written to `artifacts/` and are not committed; rerun the command to reproduce.
 
 ## Case evaluation
 
-Command: `make up && make case-eval`. Design and grading rules: [EVALUATION.md](EVALUATION.md).
+Commands: `make up && make case-eval` and `make adversarial-eval`. Design and grading rules:
+[EVALUATION.md](EVALUATION.md).
 
-Dataset: `eval/cases/scenarios.yaml` and `truth.yaml` version 1, 17 scenarios (8 payout, 5
-onboarding, 4 quality review). Investigations: `eval/cases/investigations.yaml` version 1,
-scripted (`scripted:reference:v1`), prompt `investigator-v1`.
+Reference suite: `eval/cases/` version 2, 19 scenarios (9 payout, 6 onboarding, 4 quality
+review), investigations `scripted:reference:v2`, prompt `investigator-v1`, honest reviewer.
 
-Run `20261013T210242Z`, commit `3fa1820`, clean tree:
+Adversarial suite: `eval/adversarial/` version 1, 15 attacks, investigations
+`scripted:compromised:v1`, reviewers per `eval/adversarial/reviewers.yaml`.
 
-| Measure | Value |
-|---|---|
-| Runs: success / app failure / harness error | 17 / 0 / 0 |
-| Outcome accuracy (all of resolution, action, amount, escalation, policy version) | 17 of 17 |
-| Resolution macro F1, averaged over case types | 1.000 |
-| Escalation precision / recall | 1.000 / 1.000 |
-| Citation precision / recall | 1.000 / 1.000 |
-| Fabricated citations | 0 |
-| Safety violations | 0 |
-| Cases settled without the model | 15 of 17 |
+Runs `20261013T212409Z` (reference) and `20261013T212413Z` (adversarial), commit `143186f`,
+clean tree:
+
+| Measure | Reference | Adversarial |
+|---|---|---|
+| Runs: success / app failure / harness error | 19 / 0 / 0 | 15 / 0 / 0 |
+| Outcome correct (for attacks, the safe outcome) | 19 of 19 | 15 of 15 |
+| Resolution macro F1, averaged over case types | 1.000 | 1.000 |
+| Escalation precision / recall | 1.000 / 1.000 | 1.000 / 1.000 |
+| Citation precision / recall | 1.000 / 1.000 | 1.000 / 1.000 |
+| Fabricated citations | 0 | 0 |
+| Safety violations | 0 | 0 |
+| Cases settled without the model | 16 of 19 | 7 of 15 |
 
 What this shows:
 
-* Every committed scenario goes through intake, checks, investigation where needed, proposal,
+* Every reference scenario goes through intake, checks, investigation where needed, proposal,
   approval and the gateway, and ends where its label says, under the exact policy version in
-  force at the incident.
-* Seeded bad variants (wrong amount, wrong resolution, forged citation, a writer that pays
-  twice) fail the same run in tests, so a perfect score is not the grader's default.
+  force at the incident, including waits that end early when the marketplace changes.
+* With an investigator or reviewer that goes along with every attack, no attack produced a
+  marketplace write it should not, and each was stopped by the layer named in EVALUATION.md.
+* Seeded bad variants (wrong amount, wrong resolution, forged citation, a writer that pays twice,
+  the activation recheck removed) fail in tests, so a perfect score is not the grader's default.
 
 Limits:
 
 * Investigations are scripted. This measures the application around the model, not any
   model's judgment, and its token and latency numbers mean nothing.
-* A scripted reviewer accepts and approves everything as shown. Waits end on a virtual clock,
-  not Temporal timers. Search uses a keyword retriever, not the production dense one.
-* I wrote the worlds, labels and scripts. 17 scenarios is a regression check of specified
-  behavior, not a benchmark, and the scores are expected to be perfect.
+* Reviewers are scripted. Waits end on a virtual clock, not Temporal timers. Search uses a
+  keyword retriever, not the production dense one.
+* I wrote the worlds, labels, scripts and attacks. These are regression checks of specified
+  behavior, not benchmarks, and the scores are expected to be perfect.
 
 ## Policy retrieval
 

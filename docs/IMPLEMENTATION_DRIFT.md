@@ -4,7 +4,7 @@ This log records material differences between the original phased implementation
 system that was actually built. It is not a defect list. Some changes closed correctness gaps;
 others are explicit local-development compromises or deferred production work.
 
-Last reviewed: 2026-10-13 at commit `3fa1820`.
+Last reviewed: 2026-10-13 at commit `143186f`.
 
 ## Correctness changes discovered during implementation
 
@@ -143,8 +143,8 @@ The runner that followed differs from the original plan in four deliberate ways:
   policy version in force is stable, and Temporal's time-skipping clock starts at the wall
   clock, so the two cannot share one timeline without coupling the activities to Temporal time.
   Durable timers and signals stay covered by the workflow tests.
-* People are replaced by a scripted reviewer that accepts and approves as shown. Reviewer
-  disagreement belongs with the Phase 14 approval and replay attacks.
+* People are replaced by a scripted reviewer that accepts and approves as shown. Phase 14 added
+  attacking reviewers behind the same hook; a reviewer who rejects in good faith is not modeled.
 * An escalated case is observed as having no outcome, even if it made a proposal first. The
   earlier adapter reported the abandoned proposal, which graded a correct over-limit escalation
   as wrong.
@@ -155,9 +155,10 @@ The scenario format also gained `subject_id` (what the reporter names) and an op
 
 ## Deferred evaluation work
 
-* Scenarios where evidence arrives during a wait. The runner has no scheduled world events yet,
-  so the only evidence scenario times out.
 * Real models over the same runner, with the production dense retriever, in Phase 16. That needs
   credentials and an explicit spending limit.
-* Adversarial scenarios (prompt injection, namesakes, cross-tenant attempts, approval replay) in
-  Phase 14, and injected faults with the `injected_fault` status in Phase 15.
+* Injected infrastructure faults with the `injected_fault` status in Phase 15.
+* World events are delivered only while a case waits. Events that race with checks or an
+  investigation in progress are a Phase 15 concern.
+* A reviewer who rejects a correct proposal, and the lead workflow after escalation, are not
+  modeled.

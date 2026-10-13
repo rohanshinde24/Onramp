@@ -10,7 +10,7 @@ approver.
 
 ## Status
 
-Phases 0 through 13 are complete. What works today:
+Phases 0 through 14 are complete. What works today:
 
 * tenants, users and roles, with bearer-token authentication whose role is always read from
   the database
@@ -33,11 +33,14 @@ Phases 0 through 13 are complete. What works today:
   timers, duplicate-safe direct and Kafka fallback signals, and missed-start reconciliation
 * independently scalable workflow and agent workers; model credentials exist only in the
   opt-in agent worker role
-* whole-application case evaluation: 17 versioned scenarios in isolated synthetic worlds, run
+* whole-application case evaluation: 19 versioned scenarios in isolated synthetic worlds, run
   through the real services with scripted investigations, graded deterministically against
   separate truth, with safety invariants checked against the marketplace's own write log
+* adversarial evaluation: 15 attacks (prompt injection, namesakes, another tenant's records,
+  stale policy, malformed and catalogue-violating conclusions, approval and replay attacks),
+  each run against a scripted investigator or reviewer that goes along with it
 
-Not built yet: adversarial testing, fault-injection campaigns, model and prompt regression with
+Not built yet: fault-injection campaigns, model and prompt regression with
 real models, the real operator console, full observability, Kubernetes packaging, final scale
 benchmarks, and AWS staging. No live model call has been made; the published case-evaluation
 run uses scripted investigations and measures the application, not a model.
@@ -63,6 +66,7 @@ make seed             # demo tenants, users, marketplace history and open cases
 make check            # lint, import boundaries, type check, unit tests
 make test-integration # tests against PostgreSQL
 make case-eval        # whole-application case evaluation, artifacts in artifacts/case-eval/
+make adversarial-eval # the same runner against attacks
 ```
 
 Call the API as a seeded user:
