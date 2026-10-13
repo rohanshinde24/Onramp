@@ -47,6 +47,7 @@ jobs:
       - run: ruff format --check .
       - run: mypy
       - run: pytest -m "not integration"
+      - run: pytest -m integration
 
   frontend:
     runs-on: ubuntu-24.04
