@@ -175,7 +175,7 @@ def test_duplicate_payments_escalate() -> None:
     )
 
     assert outcome.kind is OutcomeKind.ESCALATE
-    assert outcome.escalation_reason is EscalationReason.CONFLICTING_EVIDENCE
+    assert outcome.escalation_reason is EscalationReason.POLICY_REFERRAL
     assert "payout_v12_section_6_1" in outcome.citations
 
 

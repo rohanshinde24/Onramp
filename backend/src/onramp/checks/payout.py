@@ -73,9 +73,7 @@ def check_payout(f: PayoutFacts) -> CheckOutcome:
         e.cite(f.policy.passage("6.1"))
         e.reason("DUPLICATE_PAYMENTS")
         e.note(f"{len(task_payouts)} payments exist for this submission.")
-        return e.outcome(
-            OutcomeKind.ESCALATE, escalation_reason=EscalationReason.CONFLICTING_EVIDENCE
-        )
+        return e.outcome(OutcomeKind.ESCALATE, escalation_reason=EscalationReason.POLICY_REFERRAL)
 
     window = timedelta(days=int(f.policy.value("settlement_window_days")))
     e.cite(f.policy.parameter_passage("settlement_window_days"))
