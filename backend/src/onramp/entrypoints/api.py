@@ -7,9 +7,12 @@ within the graceful timeout.
 import uvicorn
 
 from onramp.api.app import create_app
+from onramp.api.services import AppServices, AuthConfig
+from onramp.cases.service import CaseService
 from onramp.config import get_settings
-from onramp.db.engine import make_engine
+from onramp.db.engine import make_engine, make_session_factory
 from onramp.db.readiness import database_check
+from onramp.marketplace.reader import SqlMarketplaceReader
 from onramp.telemetry.logging import configure_logging
 from onramp.telemetry.tracing import configure_tracing
 
@@ -20,11 +23,22 @@ def main() -> None:
     provider = configure_tracing(settings, process_role="api")
     engine = make_engine(str(settings.database_url))
     marketplace_engine = make_engine(str(settings.marketplace_database_url))
+    sessions = make_session_factory(engine)
+    services = AppServices(
+        sessions=sessions,
+        auth=AuthConfig(
+            secret=settings.auth_jwt_secret.get_secret_value(),
+            issuer=settings.auth_issuer,
+            audience=settings.auth_audience,
+        ),
+        cases=CaseService(sessions, SqlMarketplaceReader(make_session_factory(marketplace_engine))),
+    )
     app = create_app(
+        services,
         readiness_checks=[
             database_check("onramp_db", engine),
             database_check("marketplace_db", marketplace_engine),
-        ]
+        ],
     )
     try:
         uvicorn.run(

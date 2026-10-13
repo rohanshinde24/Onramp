@@ -13,7 +13,7 @@ async def _down() -> None:
 
 
 def test_liveness_ignores_dependencies() -> None:
-    client = TestClient(create_app([ReadinessCheck("database", _down)]))
+    client = TestClient(create_app(readiness_checks=[ReadinessCheck("database", _down)]))
 
     response = client.get("/healthz")
 
@@ -22,7 +22,7 @@ def test_liveness_ignores_dependencies() -> None:
 
 
 def test_ready_when_all_checks_pass() -> None:
-    client = TestClient(create_app([ReadinessCheck("database", _ok)]))
+    client = TestClient(create_app(readiness_checks=[ReadinessCheck("database", _ok)]))
 
     response = client.get("/readyz")
 
@@ -35,7 +35,9 @@ def test_ready_when_all_checks_pass() -> None:
 
 def test_not_ready_names_the_failing_check() -> None:
     client = TestClient(
-        create_app([ReadinessCheck("database", _ok), ReadinessCheck("search", _down)])
+        create_app(
+            readiness_checks=[ReadinessCheck("database", _ok), ReadinessCheck("search", _down)]
+        )
     )
 
     response = client.get("/readyz")

@@ -12,6 +12,8 @@ os.environ.setdefault(
     "postgresql+psycopg://onramp:onramp-local@localhost:5432/marketplace",
 )
 
+os.environ.setdefault("AUTH_JWT_SECRET", "test-only-signing-key-not-a-secret-0123456789")
+
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     for item in items:

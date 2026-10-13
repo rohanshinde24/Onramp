@@ -5,12 +5,14 @@ from onramp.config import AppEnv, Settings
 
 DB = "postgresql+psycopg://onramp:onramp@localhost:5432/onramp"
 MP = "postgresql+psycopg://onramp:onramp@localhost:5432/marketplace"
+KEY = "k" * 32
 
 
 def test_reads_settings_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("APP_ENV", "test")
     monkeypatch.setenv("DATABASE_URL", DB)
     monkeypatch.setenv("MARKETPLACE_DATABASE_URL", MP)
+    monkeypatch.setenv("AUTH_JWT_SECRET", KEY)
 
     settings = Settings(_env_file=None)
 
@@ -33,4 +35,13 @@ def test_rejects_unknown_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MARKETPLACE_DATABASE_URL", MP)
 
     with pytest.raises(ValidationError, match="app_env"):
+        Settings(_env_file=None)
+
+
+def test_short_signing_key_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", DB)
+    monkeypatch.setenv("MARKETPLACE_DATABASE_URL", MP)
+    monkeypatch.setenv("AUTH_JWT_SECRET", "short")
+
+    with pytest.raises(ValidationError, match="auth_jwt_secret"):
         Settings(_env_file=None)
