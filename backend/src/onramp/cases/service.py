@@ -202,6 +202,26 @@ class CaseService:
             )
             return case
 
+    def close_without_action(
+        self, principal: Principal, case_id: str, *, expected_version: int, note: str
+    ) -> SupportCase:
+        """A lead closes an escalated case that needs no resolution (duplicate, withdrawn)."""
+        principal.require(Permission.CASE_WORK_ESCALATED)
+        with self._sessions() as session, session.begin():
+            case = get_case(session, principal.tenant_id, case_id)
+            if case.version != expected_version:
+                raise StaleCaseError(case_id)
+            transition(
+                session,
+                case,
+                CaseState.CLOSED_NO_ACTION,
+                actor=_actor(principal),
+                occurred_at=self._clock(),
+                reason="closed_by_lead",
+                details={"note": note},
+            )
+            return case
+
     def _resolve_subject(self, tenant_id: str, request: IntakeRequest) -> _Subject:
         mp = self._marketplace
         if request.case_type is CaseType.ONBOARDING:

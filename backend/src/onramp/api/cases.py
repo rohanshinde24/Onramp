@@ -157,6 +157,23 @@ def escalate(
     return CaseView.of(case)
 
 
+class CloseRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_version: int = Field(gt=0)
+    note: str = Field(min_length=1, max_length=2000)
+
+
+@router.post("/{case_id}/close", response_model=CaseView)
+def close(
+    case_id: str, body: CloseRequest, principal: CurrentPrincipal, services: Services
+) -> CaseView:
+    case = services.cases.close_without_action(
+        principal, case_id, expected_version=body.expected_version, note=body.note
+    )
+    return CaseView.of(case)
+
+
 class InvalidCursorError(ValueError):
     pass
 

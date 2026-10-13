@@ -163,3 +163,33 @@ def test_unknown_escalation_reason_is_rejected(client: TestClient) -> None:
     )
 
     assert response.status_code == 422
+
+
+def test_lead_closes_escalated_case_without_action(client: TestClient) -> None:
+    case = _open(client)
+    escalated = client.post(
+        f"/cases/{case['id']}/escalate",
+        json={"reason": "operator_judgment", "expected_version": 1},
+        headers=as_user("usr_op"),
+    ).json()
+    body = {"expected_version": escalated["version"], "note": "duplicate of another ticket"}
+
+    by_operator = client.post(f"/cases/{case['id']}/close", json=body, headers=as_user("usr_op"))
+    by_lead = client.post(f"/cases/{case['id']}/close", json=body, headers=as_user("usr_lead"))
+
+    assert by_operator.status_code == 403
+    assert by_lead.status_code == 200
+    assert by_lead.json()["state"] == "closed_no_action"
+
+
+def test_open_case_cannot_be_closed_without_escalation(client: TestClient) -> None:
+    case = _open(client)
+
+    response = client.post(
+        f"/cases/{case['id']}/close",
+        json={"expected_version": 1, "note": "x"},
+        headers=as_user("usr_lead"),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"] == "illegal_transition"
