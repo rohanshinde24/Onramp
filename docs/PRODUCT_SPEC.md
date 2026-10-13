@@ -120,21 +120,26 @@ extension of the review case.
 ## 4. Case lifecycle
 
 ```
-CREATED
-  -> INITIAL_CHECKS
-  -> INVESTIGATING
-  -> WAITING_FOR_EVIDENCE   (evidence requested; resumes to INVESTIGATING when it arrives or
-                             to ESCALATED on timeout)
-  -> PROPOSED               (resolution and optional action proposed)
-  -> AWAITING_APPROVAL      (only when the action requires approval)
-  -> EXECUTING
-  -> VERIFYING
-  -> RESOLVED
+CREATED -> INITIAL_CHECKS
+INITIAL_CHECKS -> PROPOSED                 (checks are conclusive)
+               -> INVESTIGATING            (judgment needed)
+               -> WAITING_FOR_EVIDENCE     (a required document is missing)
+               -> WAITING_FOR_SETTLEMENT   (payout still inside the settlement window)
+INVESTIGATING -> PROPOSED | WAITING_FOR_EVIDENCE
+WAITING_FOR_EVIDENCE -> INVESTIGATING      (evidence arrived)
+WAITING_FOR_SETTLEMENT -> INITIAL_CHECKS   (window closed; re-check payment state)
+PROPOSED -> RESOLVED                       (accepted, no action needed)
+         -> AWAITING_APPROVAL              (action needs approval)
+         -> EXECUTING                      (action needs no approval)
+         -> INVESTIGATING                  (operator rejected the proposal)
+AWAITING_APPROVAL -> EXECUTING | INVESTIGATING (rejected)
+EXECUTING -> VERIFYING -> RESOLVED
 
-Any non-terminal state -> ESCALATED -> (lead works it) -> PROPOSED or RESOLVED
-PROPOSED / AWAITING_APPROVAL -> rejection -> INVESTIGATING or ESCALATED
-EXECUTING / VERIFYING -> postcondition failure -> ESCALATED
-Terminal: RESOLVED, CLOSED_NO_ACTION
+Any non-terminal state -> ESCALATED        (timeout, failure, or operator decision)
+ESCALATED -> PROPOSED | INVESTIGATING | RESOLVED | CLOSED_NO_ACTION   (a lead works it)
+
+Terminal: RESOLVED (resolution accepted, with any action executed and verified),
+          CLOSED_NO_ACTION (closed by a lead without a resolution, e.g. duplicate or withdrawn)
 ```
 
 Rules:
