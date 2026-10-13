@@ -1,7 +1,7 @@
 BACKEND := backend
 PY := $(BACKEND)/.venv/bin
 
-.PHONY: install lint format typecheck test test-integration test-kafka test-search check up down api-image migrate seed dlq-replay load-policies
+.PHONY: install lint format typecheck test test-integration test-kafka test-search check up down api-image migrate seed dlq-replay load-policies retrieval-eval
 
 install:
 	python3.13 -m venv $(BACKEND)/.venv
@@ -52,3 +52,6 @@ dlq-replay:
 
 load-policies:
 	$(PY)/onramp-load-policies
+
+retrieval-eval:
+	$(PY)/onramp-retrieval-eval

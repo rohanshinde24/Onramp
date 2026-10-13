@@ -36,6 +36,7 @@ onramp-event-consumer = "onramp.entrypoints.event_consumer:main"
 onramp-dlq-replay = "onramp.entrypoints.dlq_replay:main"
 onramp-load-policies = "onramp.entrypoints.load_policies:main"
 onramp-policy-indexer = "onramp.entrypoints.policy_indexer:main"
+onramp-retrieval-eval = "onramp.entrypoints.retrieval_eval:main"
 
 [project.optional-dependencies]
 dev = [

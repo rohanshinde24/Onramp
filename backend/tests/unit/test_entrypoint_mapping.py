@@ -19,6 +19,7 @@ ENTRYPOINTS = [
     "onramp.entrypoints.dlq_replay",
     "onramp.entrypoints.load_policies",
     "onramp.entrypoints.policy_indexer",
+    "onramp.entrypoints.retrieval_eval",
 ]
 
 
