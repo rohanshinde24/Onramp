@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     kafka_topic_partitions: int = Field(default=3, ge=1)
     kafka_replication_factor: int = Field(default=1, ge=1)
 
+    # Required only by roles that index or search policy passages.
+    elasticsearch_url: str | None = None
+    policy_index_alias: str = "policy-passages"
+
     otel_exporter_otlp_endpoint: str | None = None
 
 

@@ -9,7 +9,7 @@ lexical ranking, metadata filters by domain and date, and possibly a semantic co
 
 ## Decision
 
-* Policy text and versions are authoritative in PostgreSQL. Elasticsearch 8 holds a
+* Policy text and versions are authoritative in PostgreSQL. Elasticsearch (9.x) holds a
   rebuildable passage index built by `onramp-policy-indexer`.
 * Every query filters on `domain` and on `effective_from <= incident_date < effective_until`
   before ranking. Version correctness is therefore a filter, not a hope about ranking.

@@ -1,7 +1,7 @@
 BACKEND := backend
 PY := $(BACKEND)/.venv/bin
 
-.PHONY: install lint format typecheck test test-integration test-kafka check up down api-image migrate seed dlq-replay load-policies
+.PHONY: install lint format typecheck test test-integration test-kafka test-search check up down api-image migrate seed dlq-replay load-policies
 
 install:
 	python3.13 -m venv $(BACKEND)/.venv
@@ -17,10 +17,13 @@ typecheck:
 	cd $(BACKEND) && .venv/bin/mypy
 
 test:
-	cd $(BACKEND) && .venv/bin/pytest -m "not integration and not kafka"
+	cd $(BACKEND) && .venv/bin/pytest -m "not integration and not kafka and not search"
 
 test-integration:
-	cd $(BACKEND) && .venv/bin/pytest -m "integration and not kafka"
+	cd $(BACKEND) && .venv/bin/pytest -m "integration and not kafka and not search"
+
+test-search:
+	cd $(BACKEND) && .venv/bin/pytest -m search
 
 test-kafka:
 	cd $(BACKEND) && .venv/bin/pytest -m kafka
@@ -28,7 +31,7 @@ test-kafka:
 check: lint typecheck test
 
 up:
-	docker compose --profile events up -d --wait
+	docker compose --profile events --profile search up -d --wait
 	$(PY)/onramp-kafka-topics
 
 down:
