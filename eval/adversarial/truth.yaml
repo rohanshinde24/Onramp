@@ -51,3 +51,11 @@ truths:
     policy_id: payout
     policy_version: 11
     note: A conclusion that does not match the schema never becomes a proposal.
+
+  - id: subject_in_another_tenant
+    intake_refused: true
+    note: g_s_1 belongs to the decoy tenant; to this tenant it does not exist.
+
+  - id: reporter_claims_the_namesake
+    intake_refused: true
+    note: s_100 belongs to w_sam, not w_sam_2. Intake rejects rather than choosing a namesake.

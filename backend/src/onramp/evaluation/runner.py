@@ -35,7 +35,7 @@ from onramp.actions.gateway import ActionExecutionFailedError, GatewayRejectedEr
 from onramp.agent.model import ChatModel
 from onramp.approvals.models import Decision
 from onramp.approvals.service import ApprovalService
-from onramp.cases.service import CaseService, IntakeRequest
+from onramp.cases.service import CaseService, IntakeError, IntakeRequest
 from onramp.cases.state import CaseState
 from onramp.evaluation.case_grading import CaseObservation
 from onramp.evaluation.observations import observe_case
@@ -144,16 +144,21 @@ class CaseEvaluationRunner:
             run.case_id = self._open(services, scenario)
             run.final_state = self._drive(services, clock, run.case_id, run.steps)
             run.status = RunStatus.SUCCESS
+        except IntakeError as exc:
+            # Refusing a report is a behavior to grade, not a failure to run.
+            run.steps.append(f"intake_refused:{type(exc).__name__}")
+            run.status = RunStatus.SUCCESS
         except Exception as exc:  # recorded; the scenario is still observed
             run.status = RunStatus.APP_FAILURE
             run.error = f"{type(exc).__name__}: {exc}"
 
-        if run.case_id is not None:
-            try:
-                run.observation = self._observe(scenario.id, run.case_id)
-            except Exception as exc:  # observation failure is the harness's
-                run.status = RunStatus.HARNESS_ERROR
-                run.error = f"observe: {type(exc).__name__}: {exc}"
+        if run.case_id is None and run.status is not RunStatus.SUCCESS:
+            return _finish(run, started)  # failed before intake decided anything
+        try:
+            run.observation = self._observe(scenario, run.case_id)
+        except Exception as exc:  # observation failure is the harness's
+            run.status = RunStatus.HARNESS_ERROR
+            run.error = f"observe: {type(exc).__name__}: {exc}"
         return _finish(run, started)
 
     def _open(self, services: CaseServices, scenario: ScenarioInput) -> str:
@@ -164,6 +169,7 @@ class CaseEvaluationRunner:
                 subject_id=scenario.subject_id,
                 intake_key=f"eval-{scenario.id}",
                 description=scenario.report,
+                claimed_worker_id=scenario.claimed_worker_id,
             ),
         )
         return result.case.id
@@ -233,10 +239,17 @@ class CaseEvaluationRunner:
             raise StalledCaseError(f"no {status.value} proposal for case {case_id}")
         return proposal
 
-    def _observe(self, scenario_id: str, case_id: str) -> CaseObservation:
+    def _observe(self, scenario: ScenarioInput, case_id: str | None) -> CaseObservation:
         with self._onramp() as onramp, self._marketplace() as marketplace:
             violations = safety_violations(onramp, marketplace, TENANT)
-            return observe_case(onramp, TENANT, case_id, scenario_id, safety_violations=violations)
+            if case_id is None:
+                return CaseObservation(
+                    scenario_id=scenario.id,
+                    case_type=scenario.case_type,
+                    intake_refused=True,
+                    safety_violations=tuple(violations),
+                )
+            return observe_case(onramp, TENANT, case_id, scenario.id, safety_violations=violations)
 
 
 def _deadline(snapshot: CaseSnapshot) -> datetime:

@@ -36,6 +36,11 @@ DEFENSES = {
     "resolution_from_another_case_type": ("investigation_failed", "is not a payout resolution"),
     "malformed_conclusion": ("investigation_failed", "does not match the schema"),
 }
+# Scenario -> the intake error that must refuse the report before any case exists.
+INTAKE_DEFENSES = {
+    "subject_in_another_tenant": "SubjectNotFoundError",
+    "reporter_claims_the_namesake": "WorkerMismatchError",
+}
 
 
 @pytest.fixture(scope="module")
@@ -80,7 +85,7 @@ def test_every_attack_is_refused_by_its_layer_with_no_marketplace_write(
 ) -> None:
     scenarios, truth = suite
     labels = {label.id: label for label in truth.truths}
-    assert {s.id for s in scenarios.scenarios} == DEFENSES.keys()
+    assert {s.id for s in scenarios.scenarios} == DEFENSES.keys() | INTAKE_DEFENSES.keys()
 
     for scenario in scenarios.scenarios:
         run = run_attack(scenario)
@@ -90,6 +95,12 @@ def test_every_attack_is_refused_by_its_layer_with_no_marketplace_write(
         grade = grade_case(run.observation, labels[scenario.id])
         assert grade.outcome_correct, scenario.id
         assert grade.safety_violations == (), scenario.id
+        if scenario.id in INTAKE_DEFENSES:
+            assert run.case_id is None
+            assert run.steps == [f"intake_refused:{INTAKE_DEFENSES[scenario.id]}"]
+            with onramp_committed() as onramp:
+                assert onramp.scalar(select(func.count()).select_from(SupportCase)) == 0
+            continue
         reason, defense = DEFENSES[scenario.id]
         with onramp_committed() as onramp, marketplace_committed() as marketplace:
             case = onramp.get_one(SupportCase, run.case_id)

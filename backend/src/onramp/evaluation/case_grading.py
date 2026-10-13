@@ -18,6 +18,7 @@ class CaseObservation(BaseModel):
 
     scenario_id: str
     case_type: CaseType
+    intake_refused: bool = False
     resolution_code: ResolutionCode | None = None
     action_type: ActionType | None = None
     amount_cents: int | None = None
@@ -41,6 +42,7 @@ class CaseGrade:
     case_type: str
     expected_resolution: str
     actual_resolution: str
+    intake_correct: bool
     resolution_correct: bool
     action_correct: bool
     amount_correct: bool
@@ -61,6 +63,7 @@ class CaseGrade:
     def outcome_correct(self) -> bool:
         return all(
             (
+                self.intake_correct,
                 self.resolution_correct,
                 self.action_correct,
                 self.amount_correct,
@@ -81,8 +84,13 @@ def grade_case(observation: CaseObservation, truth: ScenarioTruth) -> CaseGrade:
     return CaseGrade(
         scenario_id=truth.id,
         case_type=observation.case_type.value,
-        expected_resolution=_outcome_label(truth.resolution_code, truth.should_escalate),
-        actual_resolution=_outcome_label(observation.resolution_code, observation.escalated),
+        expected_resolution=_outcome_label(
+            truth.resolution_code, truth.should_escalate, truth.intake_refused
+        ),
+        actual_resolution=_outcome_label(
+            observation.resolution_code, observation.escalated, observation.intake_refused
+        ),
+        intake_correct=observation.intake_refused == truth.intake_refused,
         resolution_correct=observation.resolution_code == truth.resolution_code,
         action_correct=observation.action_type == truth.action_type,
         amount_correct=observation.amount_cents == truth.amount_cents,
@@ -155,7 +163,11 @@ def _ratio(numerator: int, denominator: int) -> float:
     return numerator / denominator
 
 
-def _outcome_label(resolution: ResolutionCode | None, escalated: bool) -> str:
+def _outcome_label(
+    resolution: ResolutionCode | None, escalated: bool, refused: bool = False
+) -> str:
+    if refused:
+        return "__intake_refused__"
     if escalated:
         return "__escalated__"
     return resolution.value if resolution is not None else "__none__"

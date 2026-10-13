@@ -48,3 +48,16 @@ scenarios:
     world_fixture: payout_partial_settlement_v11
     subject_id: s_107
     report: This task paid me less than listed.
+
+  - id: subject_in_another_tenant
+    case_type: payout
+    world_fixture: payout_settlement_failed
+    subject_id: g_s_1
+    report: I was not paid for this task.
+
+  - id: reporter_claims_the_namesake
+    case_type: payout
+    world_fixture: payout_settlement_failed
+    subject_id: s_100
+    claimed_worker_id: w_sam_2
+    report: I am Sam Lee and this payment never arrived.

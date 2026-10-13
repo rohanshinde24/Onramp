@@ -146,3 +146,26 @@ def test_truth_citing_another_policy_version_is_rejected() -> None:
 
     with pytest.raises(TruthLabelError, match="citations not in"):
         validate_truth(stale, corpus)
+
+
+def test_refused_intake_is_graded_as_its_own_outcome() -> None:
+    refused = ScenarioTruth(id="payout_paid", intake_refused=True)
+    observed_refusal = _observation(
+        resolution_code=None,
+        citations=set(),
+        policy_id=None,
+        policy_version=None,
+        intake_refused=True,
+    )
+
+    assert grade_case(observed_refusal, refused).outcome_correct
+    assert not grade_case(_observation(), refused).outcome_correct
+    assert not grade_case(observed_refusal, _truth()).outcome_correct
+    assert grade_case(observed_refusal, _truth()).actual_resolution == "__intake_refused__"
+
+
+def test_refused_intake_truth_cannot_also_carry_an_outcome() -> None:
+    with pytest.raises(ValueError, match="refused intake"):
+        _truth(intake_refused=True)
+    with pytest.raises(ValueError, match="policy_id and policy_version"):
+        ScenarioTruth(id="x", should_escalate=True)

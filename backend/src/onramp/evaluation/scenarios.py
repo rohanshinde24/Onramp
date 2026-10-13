@@ -18,6 +18,8 @@ class ScenarioInput(BaseModel):
     world_fixture: str = Field(min_length=1)
     # What the reporter names: a submission, worker or quality review in the world.
     subject_id: str = Field(min_length=1, max_length=64)
+    # The worker the reporter says they are. Intake only cross-checks it.
+    claimed_worker_id: str | None = Field(default=None, max_length=64)
     report: str = Field(min_length=1, max_length=10_000)
 
 
@@ -42,13 +44,28 @@ class ScenarioTruth(BaseModel):
     amount_cents: int | None = Field(default=None, gt=0)
     should_escalate: bool = False
     required_citations: frozenset[str] = frozenset()
-    policy_id: str
-    policy_version: int = Field(ge=1)
+    # Intake must refuse the report: no case is opened, so nothing else applies.
+    intake_refused: bool = False
+    policy_id: str | None = None
+    policy_version: int | None = Field(default=None, ge=1)
     # Why this is the right answer, for reviewers of the label. Never shown to the system.
     note: str = ""
 
     @model_validator(mode="after")
     def coherent_outcome(self) -> "ScenarioTruth":
+        if self.intake_refused:
+            if (
+                self.should_escalate
+                or self.resolution_code is not None
+                or self.action_type is not None
+                or self.required_citations
+                or self.policy_id is not None
+                or self.policy_version is not None
+            ):
+                raise ValueError("a refused intake has no outcome, citations or policy")
+            return self
+        if self.policy_id is None or self.policy_version is None:
+            raise ValueError("an opened case is judged under a policy_id and policy_version")
         if self.should_escalate and (
             self.resolution_code is not None or self.action_type is not None
         ):
@@ -104,6 +121,8 @@ def validate_truth(truth: TruthSet, corpus: list[PolicyDocument]) -> None:
         for doc in corpus
     }
     for label in truth.truths:
+        if label.intake_refused:
+            continue
         version = (label.policy_id, label.policy_version)
         if version not in passages:
             raise TruthLabelError(f"{label.id}: unknown policy {version}")
