@@ -28,7 +28,7 @@ required) is a new `schema_version`. Consumers park versions they do not support
 | Topic | Producer | Key | Events |
 |---|---|---|---|
 | `onramp.cases` | Onramp | `case_id` | `case.created`, `case.escalated`, `case.resolved`, `case.closed` |
-| `onramp.actions` | Onramp | `case_id` | `approval.granted`, `approval.rejected` (action results in Phase 11) |
+| `onramp.actions` | Onramp | `case_id` | `approval.granted`, `approval.rejected`, `action.executed`, `action.failed` |
 | `marketplace.payments` | Marketplace | `payment_id` | `payment.authorized`, `payment.settled`, `payment.settlement_failed` |
 | `marketplace.work` | Marketplace | `submission_id` | `quality_review.overturned` |
 | `marketplace.workers` | Marketplace | `worker_id` | `worker.updated`, `evidence.uploaded` |

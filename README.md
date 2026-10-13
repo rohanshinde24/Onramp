@@ -10,7 +10,7 @@ approver.
 
 ## Status
 
-Early. What works today, without any model:
+Phases 0 through 11 are complete. What works today:
 
 * tenants, users and roles, with bearer-token authentication whose role is always read from
   the database
@@ -20,9 +20,19 @@ Early. What works today, without any model:
 * a checked case lifecycle with an append-only audit timeline
 * operator proposals, agent-proposal acceptance, escalation, and human approval bound to the
   exact proposal content
+* transactional outbox events, Kafka publishing and consumption, deduplication, DLQ replay,
+  and marketplace event relaying
+* effective-dated policies in PostgreSQL, Elasticsearch retrieval, and a reproducible retrieval
+  benchmark that selected dense search
+* deterministic checks for payout, onboarding, and quality-review cases
+* a bounded LangGraph investigator with case-bound read-only tools, deterministic conclusion
+  validation, stored trajectories, and a fake-client-tested Anthropic adapter
+* guarded action execution that rechecks identity, policy, evidence, approval, payout amount,
+  and authorization before an idempotent marketplace write and verified postcondition
 
-Not built yet: action execution, the event backbone, policy retrieval, deterministic checks,
-the agent, durable workflows and evaluation. This README only describes what exists.
+Not built yet: Temporal durable workflows, the evaluation and adversarial testing platform, the
+real operator console, full observability, Kubernetes packaging, final scale benchmarks, and AWS
+staging. No live model call has been made.
 
 ## Documents
 

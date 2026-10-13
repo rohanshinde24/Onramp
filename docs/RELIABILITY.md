@@ -24,6 +24,10 @@ without a test is a plan, not a property.
 | Stale update of a case | Rejected by the version column; 409 | `test_case_persistence.py::test_stale_update_fails` |
 | Marketplace write succeeds, response lost | Retry with the same key returns the original result; one payment | `test_marketplace_faults.py::test_lost_response_then_retry_with_same_key_pays_once` |
 | Concurrent marketplace writes with one key | Exactly one write | `test_marketplace_writer.py::test_concurrent_calls_with_one_key_write_once` |
+| Gateway crashes after recording intent, before the marketplace call | Retry resumes the same action with the same key | `test_action_gateway.py::test_crash_after_record_persistence_resumes_with_the_same_action` |
+| Gateway loses the marketplace response | It retries with the same key and records one mutation | `test_action_gateway.py::test_lost_response_retries_the_same_key_and_mutates_once` |
+| Same approved proposal executes concurrently | Both callers return one action and one business mutation | `test_action_gateway.py::test_concurrent_execution_produces_one_business_mutation` |
+| Marketplace postcondition cannot be verified | Action is unverified, failure is audited and emitted, and the case escalates | `test_action_gateway.py::test_postcondition_failure_is_stored_audited_emitted_and_escalated` |
 | Process receives SIGTERM | API drains requests; publisher finishes its cycle before exit | `test_outbox_publisher.py::test_run_until_stopped_exits_when_signalled`; API checked manually in compose (exit 0) |
 
 | Consumer sees an event twice | Second delivery skipped; effect applied once | `test_consumer_runner.py::test_duplicate_delivery_applies_once` |
