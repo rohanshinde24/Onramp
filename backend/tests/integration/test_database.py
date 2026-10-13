@@ -23,4 +23,3 @@ def test_not_ready_when_database_unreachable() -> None:
 
     assert response.status_code == 503
     assert response.json()["checks"][0]["name"] == "onramp_db"
-
