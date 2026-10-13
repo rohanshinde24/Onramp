@@ -4,7 +4,7 @@ This log records material differences between the original phased implementation
 system that was actually built. It is not a defect list. Some changes closed correctness gaps;
 others are explicit local-development compromises or deferred production work.
 
-Last reviewed: 2026-10-13 at commit `cb0013e`.
+Last reviewed: 2026-10-13 at commit `3fa1820`.
 
 ## Correctness changes discovered during implementation
 
@@ -128,21 +128,28 @@ demonstrate that deliberately bad outputs fail before the evaluator is trusted t
 run. Truth is loaded from a separate artifact and is excluded from investigator inputs; it is
 hidden from the system under evaluation, not secret from repository readers.
 
-At the current pause point, scenario/truth schemas, deterministic graders, bad-output tests, and a
-stored-record observation adapter exist. The committed scenario dataset, isolated synthetic-world
-fixtures, whole-application runner, artifact manifest/JSONL output, and `make case-eval` command do
-not exist yet. No case-evaluation benchmark claim has been made.
+The runner that followed differs from the original plan in four deliberate ways:
 
-## Next implementation steps
+* It drives the workflow's activity implementations directly, chosen by case state, with a
+  virtual clock instead of running the Temporal workflow. Scenario worlds use fixed dates so the
+  policy version in force is stable, and Temporal's time-skipping clock starts at the wall
+  clock, so the two cannot share one timeline without coupling the activities to Temporal time.
+  Durable timers and signals stay covered by the workflow tests.
+* People are replaced by a scripted reviewer that accepts and approves as shown. Reviewer
+  disagreement belongs with the Phase 14 approval and replay attacks.
+* An escalated case is observed as having no outcome, even if it made a proposal first. The
+  earlier adapter reported the abandoned proposal, which graded a correct over-limit escalation
+  as wrong.
+* Artifacts are written per suite and without Parquet until Phase 16; ADR-009 records this.
 
-1. Add a small versioned `eval/cases/scenarios.yaml` and separate truth file grounded in the
-   deterministic synthetic marketplace world.
-2. Build isolated world fixtures so each scenario has reproducible state without leaking state to
-   another scenario.
-3. Run scenarios through the real case, check, investigation, proposal, approval, and Action
-   Gateway services, using scripted models only.
-4. Write a manifest, per-case JSONL records, and a summary with commit, dataset version, run ID,
-   dirty-tree state, and operational metrics.
-5. Add and test a one-command `make case-eval` entrypoint.
-6. Prove a known-good run passes and seeded bad variants fail before expanding the dataset.
-7. Continue to avoid live model credentials or calls without explicit user approval.
+The scenario format also gained `subject_id` (what the reporter names) and an optional truth
+`note`, before any dataset was published.
+
+## Deferred evaluation work
+
+* Scenarios where evidence arrives during a wait. The runner has no scheduled world events yet,
+  so the only evidence scenario times out.
+* Real models over the same runner, with the production dense retriever, in Phase 16. That needs
+  credentials and an explicit spending limit.
+* Adversarial scenarios (prompt injection, namesakes, cross-tenant attempts, approval replay) in
+  Phase 14, and injected faults with the `injected_fault` status in Phase 15.

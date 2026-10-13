@@ -83,13 +83,18 @@ backend/src/onramp/
   policy/          policy versions, passages, applicability, indexing, retrieval
   checks/          deterministic checks per case type
   agent/           read tools, typed state, graph, model adapter, trajectory recorder
-  actions/         proposals, approvals, Action Gateway, executors
+  investigations/  runs the investigator on a case and applies its conclusion
+  proposals/       proposal content, hashing, creation and decisions
+  approvals/       approvals bound to exact proposal content
+  actions/         Action Gateway, evidence requests, executed-action records
+  audit/           append-only case timeline
   events/          envelope, contracts, outbox, publisher, consumers, dedupe
   workflows/       Temporal workflows and activities
+  evaluation/      scenario worlds, case runner, graders, safety invariants, run reports
   telemetry/       OpenTelemetry setup, metrics, log context
   entrypoints/     api, outbox_publisher, event_consumer, workflow_worker,
-                   agent_worker, policy_indexer
-eval/              scenarios, fixtures, graders, runner, reports
+                   agent_worker, policy_indexer, case_eval, retrieval_eval
+eval/              versioned scenario, truth, script and retrieval datasets
 frontend/          Next.js console
 deploy/            compose files now; Kubernetes manifests from Phase 19
 ```

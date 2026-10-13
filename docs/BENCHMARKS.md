@@ -6,14 +6,41 @@ written to `artifacts/` and are not committed; rerun the command to reproduce.
 
 ## Case evaluation
 
-Phase 13 foundations are present: versioned visible scenario inputs, separately loaded truth,
-deterministic graders, deliberately bad-output tests, and an adapter from stored application
-records to evaluation observations. The whole-application runner, committed scenario dataset,
-artifact writer, and one-command entrypoint are not built yet.
+Command: `make up && make case-eval`. Design and grading rules: [EVALUATION.md](EVALUATION.md).
 
-No case-evaluation result is published here. A future result must include its command, scenario
-version, commit, run ID, dirty-tree state, artifacts, and limitations before it can support a
-benchmark or resume claim.
+Dataset: `eval/cases/scenarios.yaml` and `truth.yaml` version 1, 17 scenarios (8 payout, 5
+onboarding, 4 quality review). Investigations: `eval/cases/investigations.yaml` version 1,
+scripted (`scripted:reference:v1`), prompt `investigator-v1`.
+
+Run `20261013T210242Z`, commit `3fa1820`, clean tree:
+
+| Measure | Value |
+|---|---|
+| Runs: success / app failure / harness error | 17 / 0 / 0 |
+| Outcome accuracy (all of resolution, action, amount, escalation, policy version) | 17 of 17 |
+| Resolution macro F1, averaged over case types | 1.000 |
+| Escalation precision / recall | 1.000 / 1.000 |
+| Citation precision / recall | 1.000 / 1.000 |
+| Fabricated citations | 0 |
+| Safety violations | 0 |
+| Cases settled without the model | 15 of 17 |
+
+What this shows:
+
+* Every committed scenario goes through intake, checks, investigation where needed, proposal,
+  approval and the gateway, and ends where its label says, under the exact policy version in
+  force at the incident.
+* Seeded bad variants (wrong amount, wrong resolution, forged citation, a writer that pays
+  twice) fail the same run in tests, so a perfect score is not the grader's default.
+
+Limits:
+
+* Investigations are scripted. This measures the application around the model, not any
+  model's judgment, and its token and latency numbers mean nothing.
+* A scripted reviewer accepts and approves everything as shown. Waits end on a virtual clock,
+  not Temporal timers. Search uses a keyword retriever, not the production dense one.
+* I wrote the worlds, labels and scripts. 17 scenarios is a regression check of specified
+  behavior, not a benchmark, and the scores are expected to be perfect.
 
 ## Policy retrieval
 

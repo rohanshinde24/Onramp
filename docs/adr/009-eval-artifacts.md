@@ -33,3 +33,16 @@ commits, and kept reproducible.
 
 * The result record schema has its own tests, and graders are tested against seeded wrong
   answers.
+
+## Implementation notes
+
+Phase 13 (case evaluation) and Phase 8 (retrieval) follow this format with two differences
+that do not change the decision:
+
+* Runs are grouped by suite, `artifacts/case-eval/<run_id>/` and
+  `artifacts/retrieval/<run_id>/`, rather than one shared `artifacts/runs/`.
+* `results.parquet` is not written yet. It arrives with DuckDB in Phase 16; until then JSONL
+  is the only record, and DuckDB can read it directly.
+
+The case-evaluation run statuses are `success`, `app_failure` and `harness_error`.
+`injected_fault` arrives with fault injection in Phase 15.
