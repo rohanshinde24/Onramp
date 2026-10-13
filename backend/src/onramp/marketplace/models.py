@@ -124,6 +124,9 @@ class Task(MarketplaceBase):
     task_type: Mapped[str] = mapped_column(String(64), nullable=False)
     payout_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    # Review criteria the task instructions ask for. NULL when the instructions do not say,
+    # which makes "did this criterion apply?" a judgment rather than a lookup.
+    criteria: Mapped[list[str] | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = created_at_column()
 
 

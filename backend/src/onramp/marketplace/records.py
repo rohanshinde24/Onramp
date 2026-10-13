@@ -56,6 +56,7 @@ class TaskRecord(Record):
     task_type: str
     payout_cents: int
     currency: str
+    criteria: list[str] | None
 
 
 class AssignmentRecord(Record):

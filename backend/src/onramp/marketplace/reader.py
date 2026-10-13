@@ -102,6 +102,7 @@ class SqlMarketplaceReader:
                 task_type=r.task_type,
                 payout_cents=r.payout_cents,
                 currency=r.currency,
+                criteria=r.criteria,
             )
 
     def get_assignment(self, tenant_id: str, assignment_id: str) -> AssignmentRecord | None:

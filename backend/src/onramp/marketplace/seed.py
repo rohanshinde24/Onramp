@@ -60,7 +60,7 @@ def seed_marketplace(session: Session, tenant_id: str, start: datetime) -> bool:
     )
 
     # Quality review dispute: failed on a criterion that may not apply.
-    w.task(f"{p}t_8823", 6000, task_type="transcription")
+    w.task(f"{p}t_8823", 6000, task_type="transcription", criteria=["accuracy", "formatting"])
     w.assignment(f"{p}a_8823", f"{p}t_8823", f"{p}w_492", start)
     w.submission(f"{p}s_8823", f"{p}a_8823", start + timedelta(hours=5), status="rejected")
     w.review(

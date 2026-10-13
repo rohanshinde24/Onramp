@@ -14,7 +14,7 @@ def reader(marketplace_sessions: sessionmaker[Session]) -> SqlMarketplaceReader:
     with marketplace_sessions() as session, session.begin():
         acme = WorldBuilder(session, "acme").tenant()
         acme.worker("w_492", "Sam Lee")
-        acme.task("t_8821", 8400)
+        acme.task("t_8821", 8400, criteria=["accuracy", "completeness"])
         acme.assignment("a_1", "t_8821", "w_492", T0)
         acme.submission("s_1", "a_1", T0 + timedelta(hours=2))
         acme.review("qr_4281", "s_1", "pass", "0.92", T0 + timedelta(hours=5))
@@ -54,6 +54,7 @@ def test_review_and_task_records_carry_refs(reader: SqlMarketplaceReader) -> Non
     assert review.ref == "quality_review:qr_4281"
     assert task is not None
     assert task.payout_cents == 8400
+    assert task.criteria == ["accuracy", "completeness"]
 
 
 def test_other_tenant_record_reads_as_missing(reader: SqlMarketplaceReader) -> None:

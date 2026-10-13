@@ -72,7 +72,13 @@ class WorldBuilder:
         )
 
     def task(
-        self, task_id: str, payout_cents: int, *, task_type: str = "labeling", currency: str = "USD"
+        self,
+        task_id: str,
+        payout_cents: int,
+        *,
+        task_type: str = "labeling",
+        currency: str = "USD",
+        criteria: list[str] | None = None,
     ) -> str:
         return self._add(
             m.Task(
@@ -81,6 +87,7 @@ class WorldBuilder:
                 task_type=task_type,
                 payout_cents=payout_cents,
                 currency=currency,
+                criteria=criteria,
             )
         )
 
