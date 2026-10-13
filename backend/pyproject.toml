@@ -39,6 +39,8 @@ onramp-dlq-replay = "onramp.entrypoints.dlq_replay:main"
 onramp-load-policies = "onramp.entrypoints.load_policies:main"
 onramp-policy-indexer = "onramp.entrypoints.policy_indexer:main"
 onramp-retrieval-eval = "onramp.entrypoints.retrieval_eval:main"
+onramp-workflow-worker = "onramp.entrypoints.workflow_worker:main"
+onramp-agent-worker = "onramp.entrypoints.agent_worker:main"
 
 [project.optional-dependencies]
 # Local embedding model for dense and hybrid policy retrieval (ADR-003 benchmark).

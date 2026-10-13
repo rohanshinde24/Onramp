@@ -3,7 +3,7 @@ FROM python:3.13-slim AS build
 WORKDIR /build
 COPY pyproject.toml ./
 COPY src ./src
-RUN pip install --no-cache-dir --prefix=/install '.[embeddings]'
+RUN pip install --no-cache-dir --prefix=/install '.[embeddings,anthropic]'
 
 FROM python:3.13-slim
 RUN useradd --create-home --uid 10001 onramp

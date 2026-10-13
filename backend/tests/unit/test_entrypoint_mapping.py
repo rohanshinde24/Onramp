@@ -20,6 +20,8 @@ ENTRYPOINTS = [
     "onramp.entrypoints.load_policies",
     "onramp.entrypoints.policy_indexer",
     "onramp.entrypoints.retrieval_eval",
+    "onramp.entrypoints.workflow_worker",
+    "onramp.entrypoints.agent_worker",
 ]
 
 

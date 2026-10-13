@@ -51,7 +51,7 @@ services:
       retries: 30
 
   elasticsearch:
-    profiles: ["search", "app"]
+    profiles: ["search", "app", "agent"]
     image: docker.elastic.co/elasticsearch/elasticsearch:9.1.4
     environment:
       discovery.type: single-node
@@ -67,7 +67,7 @@ services:
       retries: 40
 
   migrate:
-    profiles: ["app"]
+    profiles: ["app", "workflow", "agent"]
     build: ./backend
     command: ["onramp-migrate"]
     environment: &app-env
@@ -76,6 +76,7 @@ services:
       MARKETPLACE_DATABASE_URL: postgresql+psycopg://onramp:${POSTGRES_PASSWORD:-onramp-local}@postgres:5432/marketplace
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?set AUTH_JWT_SECRET in .env}
       KAFKA_BOOTSTRAP_SERVERS: kafka:19092
+      TEMPORAL_ADDRESS: temporal:7233
     depends_on:
       postgres:
         condition: service_healthy
@@ -102,7 +103,7 @@ services:
         condition: service_healthy
 
   policy-indexer:
-    profiles: ["app"]
+    profiles: ["app", "agent"]
     build: ./backend
     command: ["sh", "-c", "onramp-load-policies /home/onramp/policies && onramp-policy-indexer"]
     environment:
@@ -115,6 +116,53 @@ services:
         condition: service_completed_successfully
       elasticsearch:
         condition: service_healthy
+
+  temporal:
+    profiles: ["workflow", "app", "agent"]
+    image: temporalio/temporal:1.9.1
+    command:
+      ["server", "start-dev", "--ip", "0.0.0.0", "--db-filename", "/var/lib/temporal/temporal.db"]
+    ports:
+      - "127.0.0.1:7233:7233"
+      - "127.0.0.1:8233:8233"
+    volumes:
+      - temporal-data:/var/lib/temporal
+    healthcheck:
+      test: ["CMD", "temporal", "operator", "cluster", "health", "--address", "127.0.0.1:7233"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+
+  workflow-worker:
+    profiles: ["workflow", "app"]
+    restart: unless-stopped
+    build: ./backend
+    command: ["onramp-workflow-worker"]
+    environment: *app-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      temporal:
+        condition: service_healthy
+    stop_grace_period: 30s
+
+  agent-worker:
+    profiles: ["agent"]
+    restart: unless-stopped
+    build: ./backend
+    command: ["onramp-agent-worker"]
+    environment:
+      <<: *app-env
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?set ANTHROPIC_API_KEY to run the agent worker}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      temporal:
+        condition: service_healthy
+      policy-indexer:
+        condition: service_completed_successfully
+    stop_grace_period: 30s
 
   outbox-publisher:
     profiles: ["app"]
@@ -157,3 +205,4 @@ services:
 
 volumes:
   postgres-data:
+  temporal-data:

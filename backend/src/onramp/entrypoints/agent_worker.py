@@ -1,0 +1,64 @@
+"""Temporal agent worker: bounded model investigations on an isolated task queue."""
+
+import asyncio
+import logging
+import sys
+
+from elasticsearch import Elasticsearch
+
+import onramp.models  # noqa: F401 - configure every ORM mapper before the first query
+from onramp.agent.anthropic_model import AnthropicChatModel
+from onramp.config import get_settings
+from onramp.db.engine import make_engine, make_session_factory
+from onramp.entrypoints.temporal_worker import run_worker
+from onramp.investigations.service import InvestigationService
+from onramp.marketplace.reader import SqlMarketplaceReader
+from onramp.policy.embeddings import FastEmbedder
+from onramp.policy.search import default_retriever
+from onramp.telemetry.logging import configure_logging
+from onramp.telemetry.tracing import configure_tracing
+from onramp.workflows.activities import AgentActivities
+
+log = logging.getLogger("onramp.agent_worker")
+
+
+def main() -> None:
+    settings = get_settings()
+    if not settings.elasticsearch_url:
+        sys.exit("ELASTICSEARCH_URL is not set")
+    configure_logging(settings.log_level)
+    provider = configure_tracing(settings, process_role="agent-worker")
+    engine = make_engine(str(settings.database_url))
+    marketplace_engine = make_engine(str(settings.marketplace_database_url))
+    sessions = make_session_factory(engine)
+    marketplace_sessions = make_session_factory(marketplace_engine)
+    search = Elasticsearch(settings.elasticsearch_url)
+    activities = AgentActivities(
+        sessions,
+        InvestigationService(
+            sessions,
+            SqlMarketplaceReader(marketplace_sessions),
+            default_retriever(search, settings.policy_index_alias, FastEmbedder()),
+            AnthropicChatModel(),
+        ),
+    )
+    log.info("agent worker started queue=%s", settings.temporal_agent_task_queue)
+    try:
+        asyncio.run(
+            run_worker(
+                address=settings.temporal_address,
+                namespace=settings.temporal_namespace,
+                task_queue=settings.temporal_agent_task_queue,
+                activities=[activities.run_investigation],
+            )
+        )
+    finally:
+        log.info("agent worker stopped")
+        search.close()
+        engine.dispose()
+        marketplace_engine.dispose()
+        provider.shutdown()
+
+
+if __name__ == "__main__":
+    main()
