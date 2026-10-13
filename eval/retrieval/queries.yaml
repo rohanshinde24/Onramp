@@ -1,0 +1,55 @@
+# Retrieval benchmark, version 1.
+#
+# Each query is phrased the way a worker message or an operator question would be, not copied
+# from a section heading. `relevant` lists every passage that answers it under the policy
+# version in force at `at`. Labels were written by the corpus author, so treat results as a
+# check on retrieval behavior, not as an independent relevance study.
+version: 1
+queries:
+  # Payout, version 11 period (before 2026-07-01)
+  - {id: p01, domain: payout, at: "2026-06-20T12:00:00Z", query: "I finished the task but the money never showed up", relevant: [payout_v11_section_4_3, payout_v11_section_5_1]}
+  - {id: p02, domain: payout, at: "2026-06-20T12:00:00Z", query: "how many days should a worker wait before a payment counts as missing", relevant: [payout_v11_section_4_2]}
+  - {id: p03, domain: payout, at: "2026-06-20T12:00:00Z", query: "bank rejected the transfer, is the worker still owed", relevant: [payout_v11_section_5_1]}
+  - {id: p04, domain: payout, at: "2026-06-20T12:00:00Z", query: "worker got paid twice for one submission, should we pay again", relevant: [payout_v11_section_6_1]}
+  - {id: p05, domain: payout, at: "2026-06-20T12:00:00Z", query: "task price was raised after I started, which rate do I get", relevant: [payout_v11_section_3_1]}
+  - {id: p06, domain: payout, at: "2026-06-20T12:00:00Z", query: "my submission was rejected, can I still be paid", relevant: [payout_v11_section_2_1]}
+  - {id: p07, domain: payout, at: "2026-06-20T12:00:00Z", query: "adjustment is larger than what I can approve", relevant: [payout_v11_section_7_1]}
+  # Payout, version 12 period
+  - {id: p08, domain: payout, at: "2026-08-21T12:00:00Z", query: "I completed this task but did not receive my payout", relevant: [payout_v12_section_4_3, payout_v12_section_5_1]}
+  - {id: p09, domain: payout, at: "2026-08-21T12:00:00Z", query: "how long until an authorized payment settles", relevant: [payout_v12_section_4_2]}
+  - {id: p10, domain: payout, at: "2026-08-21T12:00:00Z", query: "I was paid less than the task listed", relevant: [payout_v12_section_4_4]}
+  - {id: p11, domain: payout, at: "2026-08-21T12:00:00Z", query: "settlement failed because the account was closed", relevant: [payout_v12_section_5_1]}
+  - {id: p12, domain: payout, at: "2026-08-21T12:00:00Z", query: "two payments exist for the same work", relevant: [payout_v12_section_6_1]}
+  - {id: p13, domain: payout, at: "2026-08-21T12:00:00Z", query: "my review was overturned, do I get paid now", relevant: [payout_v12_section_2_1]}
+  - {id: p14, domain: payout, at: "2026-08-21T12:00:00Z", query: "payment authorized three days ago and still not settled, is that a problem", relevant: [payout_v12_section_4_2]}
+  - {id: p15, domain: payout, at: "2026-08-21T12:00:00Z", query: "which amount is owed when the listing changed", relevant: [payout_v12_section_3_1]}
+  # Onboarding, version 3 period (before 2026-08-01)
+  - {id: o01, domain: onboarding, at: "2026-07-15T12:00:00Z", query: "what does a new worker need to finish before their account is active", relevant: [onboarding_v3_section_2_1]}
+  - {id: o02, domain: onboarding, at: "2026-07-15T12:00:00Z", query: "do I have to submit a W-9 to get activated", relevant: [onboarding_v3_section_2_2]}
+  - {id: o03, domain: onboarding, at: "2026-07-15T12:00:00Z", query: "my ID check is more than a year old", relevant: [onboarding_v3_section_3_1]}
+  - {id: o04, domain: onboarding, at: "2026-07-15T12:00:00Z", query: "I failed the skills test, can I try again", relevant: [onboarding_v3_section_4_1]}
+  - {id: o05, domain: onboarding, at: "2026-07-15T12:00:00Z", query: "the name on my documents is different from my profile", relevant: [onboarding_v3_section_5_1]}
+  - {id: o06, domain: onboarding, at: "2026-07-15T12:00:00Z", query: "account still pending after identity and skills passed", relevant: [onboarding_v3_section_2_1]}
+  - {id: o07, domain: onboarding, at: "2026-07-15T12:00:00Z", query: "identity verification failed, what happens", relevant: [onboarding_v3_section_4_1]}
+  # Onboarding, version 4 period
+  - {id: o08, domain: onboarding, at: "2026-09-10T12:00:00Z", query: "do I have to submit a W-9 to get activated", relevant: [onboarding_v4_section_2_2]}
+  - {id: o09, domain: onboarding, at: "2026-09-10T12:00:00Z", query: "US worker cannot be activated, missing tax paperwork", relevant: [onboarding_v4_section_2_2, onboarding_v4_section_2_1]}
+  - {id: o10, domain: onboarding, at: "2026-09-10T12:00:00Z", query: "what does a new worker need to finish before their account is active", relevant: [onboarding_v4_section_2_1]}
+  - {id: o11, domain: onboarding, at: "2026-09-10T12:00:00Z", query: "I started my application in July, does the new tax rule apply to me", relevant: [onboarding_v4_section_2_2]}
+  - {id: o12, domain: onboarding, at: "2026-09-10T12:00:00Z", query: "how long is an identity check good for", relevant: [onboarding_v4_section_3_1]}
+  - {id: o13, domain: onboarding, at: "2026-09-10T12:00:00Z", query: "when can I retake the skills assessment", relevant: [onboarding_v4_section_4_1]}
+  - {id: o14, domain: onboarding, at: "2026-09-10T12:00:00Z", query: "verification shows another person's name", relevant: [onboarding_v4_section_5_1]}
+  # Quality review, version 5 period (before 2026-09-01)
+  - {id: q01, domain: quality_review, at: "2026-08-10T12:00:00Z", query: "reviewer marked me down for something the instructions never asked for", relevant: [quality_review_v5_section_2_1, quality_review_v5_section_4_1]}
+  - {id: q02, domain: quality_review, at: "2026-08-10T12:00:00Z", query: "what score do I need to pass", relevant: [quality_review_v5_section_3_1]}
+  - {id: q03, domain: quality_review, at: "2026-08-10T12:00:00Z", query: "how many days do I have to dispute a failed review", relevant: [quality_review_v5_section_5_1]}
+  - {id: q04, domain: quality_review, at: "2026-08-10T12:00:00Z", query: "when is a failed review reversed", relevant: [quality_review_v5_section_4_1]}
+  - {id: q05, domain: quality_review, at: "2026-08-10T12:00:00Z", query: "instructions are unclear about whether formatting counts", relevant: [quality_review_v5_section_6_1]}
+  - {id: q06, domain: quality_review, at: "2026-08-10T12:00:00Z", query: "a criterion was not applicable but still lowered my average", relevant: [quality_review_v5_section_2_1]}
+  # Quality review, version 6 period
+  - {id: q07, domain: quality_review, at: "2026-09-20T12:00:00Z", query: "how many days do I have to dispute a failed review", relevant: [quality_review_v6_section_5_1]}
+  - {id: q08, domain: quality_review, at: "2026-09-20T12:00:00Z", query: "what score do I need to pass", relevant: [quality_review_v6_section_3_1]}
+  - {id: q09, domain: quality_review, at: "2026-09-20T12:00:00Z", query: "reviewer scored timestamps but the task had none", relevant: [quality_review_v6_section_2_1, quality_review_v6_section_4_1]}
+  - {id: q10, domain: quality_review, at: "2026-09-20T12:00:00Z", query: "I disputed three weeks after the review", relevant: [quality_review_v6_section_5_1]}
+  - {id: q11, domain: quality_review, at: "2026-09-20T12:00:00Z", query: "does an overturned review make my work payable", relevant: [quality_review_v6_section_4_1]}
+  - {id: q12, domain: quality_review, at: "2026-09-20T12:00:00Z", query: "my average was 0.72, did I pass", relevant: [quality_review_v6_section_3_1]}

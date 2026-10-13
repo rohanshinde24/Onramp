@@ -69,11 +69,16 @@ def in_force_filter(domain: str, at: datetime) -> list[dict[str, Any]]:
 
 
 class ElasticsearchPolicyRetriever:
-    """BM25 over heading and text, restricted to the versions in force."""
+    """BM25 over heading and text, restricted to the versions in force.
 
-    def __init__(self, client: Elasticsearch, alias: str) -> None:
+    ``version_filter=False`` exists only so the retrieval benchmark can measure what the filter
+    prevents; application code always uses the default.
+    """
+
+    def __init__(self, client: Elasticsearch, alias: str, *, version_filter: bool = True) -> None:
         self._client = client
         self._alias = alias
+        self._version_filter = version_filter
 
     def search(self, domain: str, at: datetime, query: str, k: int = 5) -> list[RetrievedPassage]:
         response = self._client.search(
@@ -81,7 +86,11 @@ class ElasticsearchPolicyRetriever:
             size=k,
             query={
                 "bool": {
-                    "filter": in_force_filter(domain, at),
+                    "filter": (
+                        in_force_filter(domain, at)
+                        if self._version_filter
+                        else [{"term": {"domain": domain}}]
+                    ),
                     "must": {"multi_match": {"query": query, "fields": ["heading^2", "text"]}},
                 }
             },
