@@ -92,6 +92,20 @@ class CheckService:
             case = get_case(session, tenant_id, case_id)
             if (case.id, case.version) != case_snapshot:
                 raise StaleCaseError(case_id)
+            record_audit(
+                session,
+                tenant_id=case.tenant_id,
+                actor=actor,
+                subject_type="case",
+                subject_id=case.id,
+                action="checks.completed",
+                occurred_at=now,
+                details={
+                    "check_run_id": run.id,
+                    "reason_codes": run.reason_codes,
+                    "outcome": run.outcome,
+                },
+            )
             transition(
                 session,
                 case,

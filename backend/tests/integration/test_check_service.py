@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from onramp.actions.evidence import EvidenceRequester
+from onramp.audit.models import AuditEvent
 from onramp.audit.service import Actor
 from onramp.cases.models import SupportCase
 from onramp.cases.state import CaseState
@@ -99,6 +100,11 @@ def test_missing_tax_form_requests_it_and_waits(sessions: Sessions) -> None:
     with marketplace() as session:
         request = session.scalars(select(m.DocumentRequest)).one()
         assert (request.worker_id, request.document_kind) == ("acme_w_610", "tax_form")
+    with onramp() as session:
+        actions = session.scalars(
+            select(AuditEvent.action).filter_by(subject_id=case_id).order_by(AuditEvent.id)
+        ).all()
+    assert actions[-2:] == ["checks.completed", "case.transitioned"]
 
 
 def test_lost_response_on_evidence_request_does_not_ask_twice(sessions: Sessions) -> None:
