@@ -151,6 +151,12 @@ Rules:
 * A case waiting on evidence or approval survives restarts and deploys, and resumes from the
   event that unblocks it.
 * Every transition writes an audit event with actor, reason and correlation ID.
+* The incident time, which selects the applicable policy version, comes from marketplace
+  records, never from the reporter: submission time for payouts, review time for
+  quality-review disputes, and the report time for onboarding (requirements are judged as of
+  when the worker raised the problem).
+* The worker on a case is derived from its subject record. A reporter-supplied worker ID is
+  only a cross-check; a mismatch rejects the intake rather than guessing between namesakes.
 * Intake is idempotent. A marketplace system supplies an intake key, and a repeated request
   with the same key returns the existing case. A new report about a subject (task, payment or
   worker onboarding) that already has an open case of the same type is attached to that case

@@ -73,6 +73,7 @@ type = "forbidden"
 source_modules = [
     "onramp.api",
     "onramp.audit",
+    "onramp.cases",
     "onramp.config",
     "onramp.db",
     "onramp.entrypoints",

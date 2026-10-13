@@ -12,8 +12,10 @@ from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 
+import onramp.models  # noqa: F401 - registers every onramp table
 from onramp.config import get_settings
 from onramp.db import migrate
+from onramp.db.base import OnrampBase
 from onramp.marketplace.models import MarketplaceBase
 
 
@@ -43,15 +45,31 @@ def onramp_engine(onramp_db_url: str) -> Iterator[Engine]:
 
 
 @pytest.fixture
-def onramp_session(onramp_engine: Engine) -> Iterator[Session]:
+def onramp_sessions(onramp_engine: Engine) -> Iterator[sessionmaker[Session]]:
+    """Session factory whose sessions share one connection rolled back after the test."""
     with onramp_engine.connect() as connection:
         outer = connection.begin()
-        session = Session(bind=connection, join_transaction_mode="create_savepoint")
         try:
-            yield session
+            yield sessionmaker(
+                bind=connection, join_transaction_mode="create_savepoint", expire_on_commit=False
+            )
         finally:
-            session.close()
             outer.rollback()
+
+
+@pytest.fixture
+def onramp_session(onramp_sessions: sessionmaker[Session]) -> Iterator[Session]:
+    with onramp_sessions() as session:
+        yield session
+
+
+@pytest.fixture
+def onramp_committed(onramp_engine: Engine) -> Iterator[sessionmaker[Session]]:
+    """Real committing sessions for concurrency tests. Tables are truncated afterwards."""
+    yield sessionmaker(onramp_engine, expire_on_commit=False)
+    tables = ", ".join(f'"{t}"' for t in OnrampBase.metadata.tables)
+    with onramp_engine.begin() as connection:
+        connection.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
 
 
 @pytest.fixture(scope="session")
@@ -75,7 +93,9 @@ def marketplace_sessions(marketplace_engine: Engine) -> Iterator[sessionmaker[Se
     with marketplace_engine.connect() as connection:
         outer = connection.begin()
         try:
-            yield sessionmaker(bind=connection, join_transaction_mode="create_savepoint")
+            yield sessionmaker(
+                bind=connection, join_transaction_mode="create_savepoint", expire_on_commit=False
+            )
         finally:
             outer.rollback()
 

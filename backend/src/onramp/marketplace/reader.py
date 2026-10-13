@@ -30,6 +30,7 @@ class MarketplaceReader(Protocol):
     def get_task(self, tenant_id: str, task_id: str) -> TaskRecord | None: ...
     def get_assignment(self, tenant_id: str, assignment_id: str) -> AssignmentRecord | None: ...
     def get_submission(self, tenant_id: str, submission_id: str) -> SubmissionRecord | None: ...
+    def get_quality_review(self, tenant_id: str, review_id: str) -> QualityReviewRecord | None: ...
     def get_quality_reviews(
         self, tenant_id: str, submission_id: str
     ) -> list[QualityReviewRecord]: ...
@@ -129,6 +130,11 @@ class SqlMarketplaceReader:
                 submitted_at=r.submitted_at,
             )
 
+    def get_quality_review(self, tenant_id: str, review_id: str) -> QualityReviewRecord | None:
+        with self._sessions() as s:
+            r = s.scalar(select(m.QualityReview).filter_by(tenant_id=tenant_id, id=review_id))
+            return None if r is None else _review(r)
+
     def get_quality_reviews(self, tenant_id: str, submission_id: str) -> list[QualityReviewRecord]:
         with self._sessions() as s:
             rows = s.scalars(
@@ -136,21 +142,7 @@ class SqlMarketplaceReader:
                 .filter_by(tenant_id=tenant_id, submission_id=submission_id)
                 .order_by(m.QualityReview.reviewed_at, m.QualityReview.id)
             )
-            return [
-                QualityReviewRecord(
-                    id=r.id,
-                    tenant_id=r.tenant_id,
-                    submission_id=r.submission_id,
-                    reviewer_id=r.reviewer_id,
-                    result=r.result,
-                    score=r.score,
-                    rubric_scores=r.rubric_scores,
-                    reviewer_comment=r.reviewer_comment,
-                    reviewed_at=r.reviewed_at,
-                    overturned_at=r.overturned_at,
-                )
-                for r in rows
-            ]
+            return [_review(r) for r in rows]
 
     def get_payments_for_submission(
         self, tenant_id: str, submission_id: str
@@ -211,4 +203,19 @@ def _worker(r: m.Worker) -> WorkerRecord:
         email=r.email,
         status=r.status,
         country=r.country,
+    )
+
+
+def _review(r: m.QualityReview) -> QualityReviewRecord:
+    return QualityReviewRecord(
+        id=r.id,
+        tenant_id=r.tenant_id,
+        submission_id=r.submission_id,
+        reviewer_id=r.reviewer_id,
+        result=r.result,
+        score=r.score,
+        rubric_scores=r.rubric_scores,
+        reviewer_comment=r.reviewer_comment,
+        reviewed_at=r.reviewed_at,
+        overturned_at=r.overturned_at,
     )
