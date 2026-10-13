@@ -16,6 +16,7 @@ ENTRYPOINTS = [
     "onramp.entrypoints.outbox_publisher",
     "onramp.entrypoints.seed",
     "onramp.entrypoints.migrate",
+    "onramp.entrypoints.dlq_replay",
 ]
 
 

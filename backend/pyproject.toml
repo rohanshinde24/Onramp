@@ -31,6 +31,7 @@ onramp-seed = "onramp.entrypoints.seed:main"
 onramp-kafka-topics = "onramp.entrypoints.kafka_topics:main"
 onramp-outbox-publisher = "onramp.entrypoints.outbox_publisher:main"
 onramp-event-consumer = "onramp.entrypoints.event_consumer:main"
+onramp-dlq-replay = "onramp.entrypoints.dlq_replay:main"
 
 [project.optional-dependencies]
 dev = [
