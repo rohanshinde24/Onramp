@@ -8,13 +8,14 @@ from sqlalchemy.orm import Session, sessionmaker
 from onramp.actions.evidence import EvidenceRequester
 from onramp.actions.gateway import ActionGateway
 from onramp.audit.service import Actor
-from onramp.cases.models import SupportCase
+from onramp.cases.models import CaseType, SupportCase
 from onramp.cases.service import transition
 from onramp.cases.state import CaseState
 from onramp.checks.models import CheckRun
 from onramp.checks.service import CheckService
 from onramp.db.types import new_id
 from onramp.entrypoints.seed import seed
+from onramp.evaluation.observations import observe_case
 from onramp.marketplace.reader import SqlMarketplaceReader
 from onramp.marketplace.writer import SqlMarketplaceWriter
 from onramp.policy.corpus import load_corpus
@@ -190,3 +191,25 @@ def test_evidence_timeout_escalates_only_after_its_deadline(
 
     expired = _activities(onramp_sessions, marketplace_sessions, lambda: NOW + timedelta(days=7))
     assert expired.expire_evidence_wait(request).state == CaseState.ESCALATED
+
+
+def test_case_observation_is_derived_from_persisted_fast_path_records(
+    onramp_sessions: sessionmaker[Session], marketplace_sessions: sessionmaker[Session]
+) -> None:
+    activities = _activities(onramp_sessions, marketplace_sessions)
+    case_id = _case_id(onramp_sessions, "acme_s_8821")
+
+    activities.run_case_checks(CaseWorkflowInput("acme", case_id))
+    with onramp_sessions() as session:
+        observation = observe_case(session, "acme", case_id, "payout_missing")
+
+    assert observation.scenario_id == "payout_missing"
+    assert observation.case_type == CaseType.PAYOUT
+    assert observation.resolution_code is not None
+    assert observation.action_type is not None
+    assert observation.amount_cents == 8400
+    assert observation.policy_id == "payout"
+    assert observation.policy_version == 12
+    assert observation.citations
+    assert not observation.used_model
+    assert observation.model_calls == 0
