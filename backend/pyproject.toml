@@ -107,6 +107,25 @@ forbidden_modules = ["onramp.marketplace.models", "onramp.marketplace.builder"]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
+name = "Only the actions package writes to the marketplace (ADR-008)"
+type = "forbidden"
+source_modules = [
+    "onramp.api",
+    "onramp.approvals",
+    "onramp.audit",
+    "onramp.cases",
+    "onramp.checks",
+    "onramp.events",
+    "onramp.evaluation",
+    "onramp.identity",
+    "onramp.policy",
+    "onramp.proposals",
+]
+forbidden_modules = ["onramp.marketplace.writer", "onramp.marketplace.activity"]
+# Code may receive a gateway object that holds a writer, but never import the writer itself.
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
 name = "Foundation modules do not depend on domain modules"
 type = "forbidden"
 source_modules = ["onramp.config", "onramp.db", "onramp.telemetry"]

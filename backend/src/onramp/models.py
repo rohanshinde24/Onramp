@@ -3,6 +3,7 @@
 from onramp.approvals.models import Approval
 from onramp.audit.models import AuditEvent
 from onramp.cases.models import SupportCase
+from onramp.checks.models import CheckRun
 from onramp.events.models import AggregateSequence, OutboxEvent, ProcessedEvent
 from onramp.identity.models import Tenant, User
 from onramp.policy.models import Policy, PolicyPassage, PolicyVersion
@@ -12,6 +13,7 @@ __all__ = [
     "AggregateSequence",
     "Approval",
     "AuditEvent",
+    "CheckRun",
     "OutboxEvent",
     "Policy",
     "PolicyPassage",

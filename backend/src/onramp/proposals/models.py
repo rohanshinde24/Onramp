@@ -45,7 +45,10 @@ class Proposal(OnrampBase):
         ForeignKeyConstraint(
             ["tenant_id", "case_id"], ["support_case.tenant_id", "support_case.id"]
         ),
-        CheckConstraint(_in("proposer_type", ["user", "agent"]), name="known_proposer_type"),
+        # system: deterministic checks; agent: the investigator; user: a person.
+        CheckConstraint(
+            _in("proposer_type", ["user", "agent", "system"]), name="known_proposer_type"
+        ),
         CheckConstraint("(proposer_type = 'user') = (proposer_id IS NOT NULL)", name="user_has_id"),
         CheckConstraint(
             _in("resolution_code", [c.value for c in ResolutionCode]), name="known_resolution"

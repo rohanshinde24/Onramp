@@ -5,7 +5,7 @@ the applicable policy, come from marketplace records.
 """
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -293,7 +293,7 @@ def transition(
     actor: Actor,
     occurred_at: datetime,
     reason: str,
-    details: dict[str, object] | None = None,
+    details: Mapping[str, object] | None = None,
     correlation_id: str | None = None,
     causation_id: str | None = None,
 ) -> None:
