@@ -116,3 +116,7 @@ def marketplace_committed(marketplace_engine: Engine) -> Iterator[sessionmaker[S
     tables = ", ".join(f'"{t}"' for t in MarketplaceBase.metadata.tables)
     with marketplace_engine.begin() as connection:
         connection.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
+
+
+# Investigator fixtures shared by agent tests.
+from tests.integration.agent_support import world  # noqa: E402, F401
