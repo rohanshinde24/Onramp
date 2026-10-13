@@ -16,7 +16,14 @@ from sqlalchemy.orm import Mapped, mapped_column
 from onramp.db.base import OnrampBase
 from onramp.db.types import ID_LENGTH, created_at_column, id_column
 
-STATUSES = ("concluded", "budget_exhausted", "invalid_output", "model_error", "superseded")
+STATUSES = (
+    "concluded",
+    "budget_exhausted",
+    "invalid_output",
+    "model_error",
+    "model_refused",
+    "superseded",
+)
 
 
 class InvestigationRun(OnrampBase):

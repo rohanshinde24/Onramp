@@ -36,6 +36,9 @@ class Message:
     text: str = ""
     tool_calls: tuple[ToolCall, ...] = ()
     tool_outputs: tuple[ToolOutput, ...] = ()
+    # The provider's own content for an assistant turn, replayed unchanged so blocks the
+    # provider requires back (thinking, fallback markers) are preserved.
+    raw: Any = None
 
 
 @dataclass(frozen=True)
@@ -49,6 +52,7 @@ class ModelResponse:
     text: str = ""
     tool_calls: tuple[ToolCall, ...] = ()
     usage: Usage = field(default_factory=Usage)
+    raw: Any = None
 
 
 class ChatModel(Protocol):
@@ -62,6 +66,10 @@ class ChatModel(Protocol):
 
 class ModelUnavailableError(Exception):
     """The provider failed or timed out. The investigation may be retried later."""
+
+
+class ModelRefusedError(Exception):
+    """The provider declined the request. Retrying the same input will not help."""
 
 
 Script = Callable[[Sequence[Message]], ModelResponse]

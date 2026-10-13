@@ -73,7 +73,7 @@ jobs:
           cache-dependency-path: backend/pyproject.toml
       # Same extras as make install, so CI checks what developers run. Tests never load the
       # embedding model itself; only the package is needed for type checking and imports.
-      - run: pip install -e '.[dev,embeddings]'
+      - run: pip install -e '.[dev,embeddings,anthropic]'
       - name: Create marketplace database
         run: psql "postgresql://onramp:onramp-ci@localhost:5432/onramp" -f ../deploy/postgres/init-databases.sql
       - run: ruff check .

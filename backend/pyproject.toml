@@ -44,6 +44,10 @@ onramp-retrieval-eval = "onramp.entrypoints.retrieval_eval:main"
 embeddings = [
     "fastembed>=0.9,<0.10",
 ]
+# Anthropic provider for the investigator. Live calls need credentials and cost money.
+anthropic = [
+    "anthropic>=1.13,<2",
+]
 dev = [
     "pytest>=9.1,<10",
     "httpx2>=2.13,<3",

@@ -6,6 +6,7 @@ from typing import Any
 from onramp.agent.graph import Budget, investigate
 from onramp.agent.model import (
     Message,
+    ModelRefusedError,
     ModelResponse,
     ModelUnavailableError,
     ScriptedModel,
@@ -189,3 +190,13 @@ def test_tool_definitions_never_include_a_write(world: World) -> None:
 
     names = {t.name for tools in seen for t in tools}
     assert not {n for n in names if n.startswith(("issue", "activate", "overturn", "request"))}
+
+
+def test_provider_refusal_ends_the_investigation(world: World) -> None:
+    def refuse(_: Sequence[Message]) -> ModelResponse:
+        raise ModelRefusedError("model declined (category: None)")
+
+    result = investigate(ScriptedModel([refuse]), toolbox(world), CaseType.PAYOUT)
+
+    assert result.status == "model_refused"
+    assert result.conclusion is None

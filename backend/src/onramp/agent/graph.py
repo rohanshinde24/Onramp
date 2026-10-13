@@ -23,6 +23,7 @@ from onramp.agent.conclusion import AgentConclusion, Observations, validate_conc
 from onramp.agent.model import (
     ChatModel,
     Message,
+    ModelRefusedError,
     ModelUnavailableError,
     ToolCall,
     ToolDefinition,
@@ -48,7 +49,7 @@ DEFAULT_BUDGET = Budget()
 
 @dataclass
 class InvestigationResult:
-    status: str  # concluded | budget_exhausted | invalid_output | model_error
+    status: str  # concluded | budget_exhausted | invalid_output | model_error | model_refused
     conclusion: AgentConclusion | None
     model_calls: int
     input_tokens: int
@@ -116,7 +117,11 @@ def investigate(
             response = model.respond(system, state["transcript"], tools)
         except ModelUnavailableError as exc:
             return {"status": "model_error", "problems": [str(exc)]}
-        message = Message("assistant", text=response.text, tool_calls=response.tool_calls)
+        except ModelRefusedError as exc:
+            return {"status": "model_refused", "problems": [str(exc)]}
+        message = Message(
+            "assistant", text=response.text, tool_calls=response.tool_calls, raw=response.raw
+        )
         step = state["model_calls"] + 1
         return {
             "transcript": [*state["transcript"], message],
