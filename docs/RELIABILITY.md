@@ -29,9 +29,16 @@ without a test is a plan, not a property.
 | Same approved proposal executes concurrently | Both callers return one action and one business mutation | `test_action_gateway.py::test_concurrent_execution_produces_one_business_mutation` |
 | Marketplace postcondition cannot be verified | Action is unverified, failure is audited and emitted, and the case escalates | `test_action_gateway.py::test_postcondition_failure_is_stored_audited_emitted_and_escalated` |
 | Process receives SIGTERM | API drains requests; publisher finishes its cycle before exit | `test_outbox_publisher.py::test_run_until_stopped_exits_when_signalled`; API checked manually in compose (exit 0) |
+| API commits a case before its workflow start reaches Temporal | The workflow worker reconciles every nonterminal case on startup using the deterministic workflow ID | `test_workflow_activities.py::test_reconciler_starts_every_committed_nonterminal_case` |
+| Direct workflow signal is lost after a proposal or approval commit | The same outbox `event_id` reaches the case-signal consumer and wakes the workflow | `test_api_workflow_notifications.py`, `test_workflow_event_handler.py` |
+| Evidence wait reaches seven days | A durable Temporal timer invokes an idempotent activity that re-reads the deadline and escalates only if the case still waits | `test_case_workflow.py::test_evidence_deadline_uses_time_skipping`, `test_workflow_activities.py::test_evidence_timeout_escalates_only_after_its_deadline` |
+| Settlement window reaches its policy deadline | A durable Temporal timer returns the case to checks | `test_case_workflow.py::test_settlement_deadline_uses_time_skipping`, `test_workflow_activities.py::test_settlement_resume_rechecks_current_state_and_deadline` |
+| Workflow receives a duplicate signal | The signal ID is applied once and the workflow re-reads PostgreSQL truth | `test_case_workflow.py::test_duplicate_signal_wakes_the_workflow_once` |
+| Workflow worker stops while a case waits | Temporal retains the wait and queued signal; a replacement worker replays history and continues | `test_case_workflow.py::test_signal_waits_in_history_across_worker_restart` |
 
 | Consumer sees an event twice | Second delivery skipped; effect applied once | `test_consumer_runner.py::test_duplicate_delivery_applies_once` |
 | Consumer dies after DB commit, before offset commit | Redelivered and skipped | `test_consumer_runner.py::test_crash_after_db_commit_before_offset_commit` |
+| Temporal signal fails after the consumer DB commit | Offset stays uncommitted; redelivery retries the post-commit signal with the same ID while the DB effect remains single | `test_consumer_runner.py::test_post_commit_effect_retries_after_database_claim_without_committing_offset` |
 | Unsupported event version or malformed envelope | Parked once, never guessed at | `test_consumer_runner.py::test_unsupported_version_is_parked_once`, `test_malformed_message_is_parked` |
 | Handler keeps failing | Retried, then parked with the error; no partial effect | `test_consumer_runner.py::test_persistent_handler_failure_is_parked_without_effect` |
 | Parked event after the fix | Replayed and applied once | `test_dlq_replay.py::test_replayed_event_is_applied_by_the_fixed_consumer` |
@@ -51,5 +58,4 @@ without a test is a plan, not a property.
 
 ## Not yet handled
 
-* Workflow recovery and duplicate signals (Phase 12).
 * Retention of published outbox rows and marketplace idempotency records.

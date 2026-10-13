@@ -72,6 +72,8 @@ or the policy do not close:
 | Quality review | An applicable criterion was not scored, or a score is unreadable | The review record is incomplete |
 
 A case also reaches investigation when evidence arrives for a case that was waiting for it.
+If no evidence arrives within seven days, the durable case workflow re-reads the stored check
+deadline and escalates with `evidence_timeout`.
 
 Whether this boundary is in the right place is measured, not assumed: the evaluation in
 Phase 13 reports the share of cases settled without a model call and the precision of those

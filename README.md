@@ -10,7 +10,7 @@ approver.
 
 ## Status
 
-Phases 0 through 11 are complete. What works today:
+Phases 0 through 12 are complete. What works today:
 
 * tenants, users and roles, with bearer-token authentication whose role is always read from
   the database
@@ -29,10 +29,14 @@ Phases 0 through 11 are complete. What works today:
   validation, stored trajectories, and a fake-client-tested Anthropic adapter
 * guarded action execution that rechecks identity, policy, evidence, approval, payout amount,
   and authorization before an idempotent marketplace write and verified postcondition
+* one durable Temporal workflow per case, with retry-safe activities, settlement and evidence
+  timers, duplicate-safe direct and Kafka fallback signals, and missed-start reconciliation
+* independently scalable workflow and agent workers; model credentials exist only in the
+  opt-in agent worker role
 
-Not built yet: Temporal durable workflows, the evaluation and adversarial testing platform, the
-real operator console, full observability, Kubernetes packaging, final scale benchmarks, and AWS
-staging. No live model call has been made.
+Not built yet: the evaluation and adversarial testing platform, the real operator console, full
+observability, Kubernetes packaging, final scale benchmarks, and AWS staging. No live model call
+has been made.
 
 ## Documents
 

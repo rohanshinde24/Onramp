@@ -28,7 +28,7 @@ required) is a new `schema_version`. Consumers park versions they do not support
 | Topic | Producer | Key | Events |
 |---|---|---|---|
 | `onramp.cases` | Onramp | `case_id` | `case.created`, `case.escalated`, `case.resolved`, `case.closed` |
-| `onramp.actions` | Onramp | `case_id` | `approval.granted`, `approval.rejected`, `action.executed`, `action.failed` |
+| `onramp.actions` | Onramp | `case_id` | `proposal.accepted`, `proposal.rejected`, `approval.granted`, `approval.rejected`, `action.executed`, `action.failed` |
 | `marketplace.payments` | Marketplace | `payment_id` | `payment.authorized`, `payment.settled`, `payment.settlement_failed` |
 | `marketplace.work` | Marketplace | `submission_id` | `quality_review.overturned` |
 | `marketplace.workers` | Marketplace | `worker_id` | `worker.updated`, `evidence.uploaded` |
@@ -57,6 +57,7 @@ it would a third party's events.
 | Group | Topics | Handles | Effect |
 |---|---|---|---|
 | `onramp-case-evidence` | `marketplace.workers`, `marketplace.payments` | `evidence.uploaded` v1, `payment.settled` v1, `payment.settlement_failed` v1 | Records the evidence on the open case it concerns and resumes the case if it was waiting for that kind of evidence |
+| `onramp-case-signals` | `onramp.cases`, `onramp.actions` | case lifecycle, proposal-decision and approval-decision events v1 | Starts or wakes the case's Temporal workflow with the durable `event_id` |
 
 Every consumer runs on `ConsumerRunner`:
 
@@ -65,7 +66,10 @@ Every consumer runs on `ConsumerRunner`:
    unsupported version is parked.
 3. Insert `(consumer_group, event_id)` into `processed_event` and apply the effect in one
    transaction. An existing row means the event was already handled; it is skipped.
-4. Commit the offset only after the database commit.
+4. Run any external post-commit effect, such as a Temporal signal. A failure leaves the Kafka
+   offset uncommitted; redelivery repeats the same signal even though the database claim is now
+   a duplicate.
+5. Commit the offset only after the database commit and post-commit effect.
 
 ## Parking and replay
 

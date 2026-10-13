@@ -61,6 +61,41 @@ def test_duplicate_signal_wakes_the_workflow_once() -> None:
     asyncio.run(scenario())
 
 
+def test_signal_waits_in_history_across_worker_restart() -> None:
+    async def scenario() -> None:
+        async with await WorkflowEnvironment.start_time_skipping() as environment:
+            plan = _SignalPlan()
+            request = CaseWorkflowInput("acme", "case_restart")
+            async with Worker(
+                environment.client,
+                task_queue=WORKFLOW_TASK_QUEUE,
+                workflows=[CaseWorkflow],
+                activities=[plan.read_case],
+            ):
+                handle = await environment.client.start_workflow(
+                    CaseWorkflow.run,
+                    request,
+                    id=case_workflow_id(request.case_id),
+                    task_queue=WORKFLOW_TASK_QUEUE,
+                )
+                await plan.first_read.wait()
+
+            await handle.signal(CaseWorkflow.case_changed, CaseSignal("evt_while_down"))
+
+            async with Worker(
+                environment.client,
+                task_queue=WORKFLOW_TASK_QUEUE,
+                workflows=[CaseWorkflow],
+                activities=[plan.read_case],
+            ):
+                result = await handle.result()
+
+            assert result.state == CaseState.RESOLVED
+            assert result.applied_signal_ids == ("evt_while_down",)
+
+    asyncio.run(scenario())
+
+
 class _TimerPlan:
     def __init__(self) -> None:
         self.resumed = False
