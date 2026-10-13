@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from fastapi import FastAPI
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
-from onramp.api import health, me
+from onramp.api import cases, health, me
 from onramp.api.errors import install_error_handlers
 from onramp.api.health import ReadinessCheck
 from onramp.api.middleware import request_id_middleware
@@ -22,5 +22,6 @@ def create_app(
         app.state.services = services
         install_error_handlers(app)
         app.include_router(me.router)
+        app.include_router(cases.router)
     FastAPIInstrumentor.instrument_app(app, excluded_urls="healthz,readyz")
     return app

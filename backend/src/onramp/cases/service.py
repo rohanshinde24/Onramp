@@ -8,14 +8,16 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from onramp.audit.models import ActorType
 from onramp.audit.service import Actor, record_audit
+from onramp.cases.escalation import EscalationReason
 from onramp.cases.models import SUBJECT_TYPE, CaseType, SupportCase
+from onramp.cases.queries import get_case
 from onramp.cases.state import TERMINAL_STATES, CaseState, require_transition
 from onramp.db.types import new_id
 from onramp.identity.principal import Principal
@@ -30,6 +32,8 @@ def _utcnow() -> datetime:
 
 
 class IntakeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     case_type: CaseType
     subject_id: str = Field(min_length=1, max_length=64)
     intake_key: str = Field(min_length=1, max_length=200)
@@ -172,6 +176,32 @@ class CaseService:
             )
             return IntakeResult(case, created=True)
 
+    def escalate(
+        self,
+        principal: Principal,
+        case_id: str,
+        reason: EscalationReason,
+        *,
+        expected_version: int,
+        note: str = "",
+    ) -> SupportCase:
+        principal.require(Permission.CASE_ESCALATE)
+        with self._sessions() as session, session.begin():
+            case = get_case(session, principal.tenant_id, case_id)
+            if case.version != expected_version:
+                raise StaleCaseError(case_id)
+            case.escalation_reason = reason.value
+            transition(
+                session,
+                case,
+                CaseState.ESCALATED,
+                actor=_actor(principal),
+                occurred_at=self._clock(),
+                reason=reason.value,
+                details={"note": note} if note else None,
+            )
+            return case
+
     def _resolve_subject(self, tenant_id: str, request: IntakeRequest) -> _Subject:
         mp = self._marketplace
         if request.case_type is CaseType.ONBOARDING:
@@ -199,6 +229,10 @@ class CaseService:
         if request.case_type is CaseType.PAYOUT:
             incident_at, basis = submission.submitted_at, "submission.submitted_at"
         return _Subject(assignment.worker_id, incident_at, basis)
+
+
+class StaleCaseError(Exception):
+    """The case changed since the caller last read it."""
 
 
 def _actor(principal: Principal) -> Actor:

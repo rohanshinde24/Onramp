@@ -4,9 +4,13 @@ from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
+from sqlalchemy.orm.exc import StaleDataError
 
+from onramp.api.cases import InvalidCursorError
+from onramp.cases.queries import CaseNotFoundError
 from onramp.cases.service import (
     IntakeKeyConflictError,
+    StaleCaseError,
     SubjectNotFoundError,
     WorkerMismatchError,
 )
@@ -19,6 +23,10 @@ _STATUS: dict[type[Exception], tuple[int, str]] = {
     WorkerMismatchError: (status.HTTP_422_UNPROCESSABLE_CONTENT, "worker_mismatch"),
     IntakeKeyConflictError: (status.HTTP_409_CONFLICT, "intake_key_conflict"),
     IllegalTransitionError: (status.HTTP_409_CONFLICT, "illegal_transition"),
+    CaseNotFoundError: (status.HTTP_404_NOT_FOUND, "case_not_found"),
+    StaleCaseError: (status.HTTP_409_CONFLICT, "stale_case"),
+    StaleDataError: (status.HTTP_409_CONFLICT, "stale_case"),
+    InvalidCursorError: (status.HTTP_422_UNPROCESSABLE_CONTENT, "invalid_cursor"),
 }
 
 
