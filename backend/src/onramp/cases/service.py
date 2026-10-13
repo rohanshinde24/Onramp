@@ -21,6 +21,14 @@ from onramp.cases.models import SUBJECT_TYPE, CaseType, SupportCase
 from onramp.cases.queries import get_case
 from onramp.cases.state import TERMINAL_STATES, CaseState, require_transition
 from onramp.db.types import new_id
+from onramp.events.contracts import (
+    CaseClosedV1,
+    CaseCreatedV1,
+    CaseEscalatedV1,
+    CaseResolvedV1,
+    Payload,
+)
+from onramp.events.outbox import emit
 from onramp.identity.principal import Principal
 from onramp.identity.roles import Permission, Role
 from onramp.marketplace.reader import MarketplaceReader
@@ -177,6 +185,19 @@ class CaseService:
                     "incident_basis": case.incident_basis,
                 },
             )
+            emit(
+                session,
+                event_type="case.created",
+                tenant_id=case.tenant_id,
+                aggregate_id=case.id,
+                payload=CaseCreatedV1(
+                    case_type=case.case_type,
+                    subject=f"{case.subject_type}:{case.subject_id}",
+                    worker_id=case.worker_id,
+                    incident_at=case.incident_at,
+                ),
+                occurred_at=now,
+            )
             return IntakeResult(case, created=True)
 
     def escalate(
@@ -297,6 +318,33 @@ def transition(
         causation_id=causation_id,
     )
     session.flush()
+    event = _lifecycle_event(case, current, target, actor, reason)
+    if event is not None:
+        emit(
+            session,
+            event_type=event[0],
+            tenant_id=case.tenant_id,
+            aggregate_id=case.id,
+            payload=event[1],
+            occurred_at=occurred_at,
+            correlation_id=correlation_id,
+            causation_id=causation_id,
+        )
     # Staged in the caller's transaction; the audit row is the record of whether it committed.
     with log_context(case_id=case.id, tenant_id=case.tenant_id):
         log.info("case transition staged %s -> %s reason=%s", current.value, target.value, reason)
+
+
+def _lifecycle_event(
+    case: SupportCase, current: CaseState, target: CaseState, actor: Actor, reason: str
+) -> tuple[str, Payload] | None:
+    """The domain event a transition publishes, if other systems care about it."""
+    if target is CaseState.ESCALATED:
+        return "case.escalated", CaseEscalatedV1(reason=reason, from_state=current.value)
+    if target is CaseState.RESOLVED:
+        if case.resolution_code is None:
+            raise ValueError(f"case {case.id} resolved without a resolution code")
+        return "case.resolved", CaseResolvedV1(resolution_code=case.resolution_code)
+    if target is CaseState.CLOSED_NO_ACTION:
+        return "case.closed", CaseClosedV1(closed_by=actor.id or actor.type.value)
+    return None

@@ -20,6 +20,8 @@ from onramp.cases.resolutions import RiskClass
 from onramp.cases.service import transition
 from onramp.cases.state import CaseState
 from onramp.db.types import new_id
+from onramp.events.contracts import ApprovalGrantedV1, ApprovalRejectedV1
+from onramp.events.outbox import emit
 from onramp.identity.principal import Principal
 from onramp.identity.roles import Permission
 from onramp.proposals.models import Proposal, ProposalStatus
@@ -96,7 +98,12 @@ class ApprovalService:
             )
             if proposal is None:
                 raise ProposalNotFoundError(proposal_id)
-            if proposal.risk_class is None or proposal.status != ProposalStatus.ACCEPTED:
+            action_type = proposal.action_type
+            if (
+                action_type is None
+                or proposal.risk_class is None
+                or proposal.status != ProposalStatus.ACCEPTED
+            ):
                 raise NotAwaitingApprovalError(proposal_id)
             risk = RiskClass(proposal.risk_class)
             principal.require(_REQUIRED_PERMISSION[risk])
@@ -144,6 +151,31 @@ class ApprovalService:
                     "content_hash": content_hash,
                 },
             )
+
+            if decision is Decision.APPROVED:
+                emit(
+                    session,
+                    event_type="approval.granted",
+                    tenant_id=case.tenant_id,
+                    aggregate_id=case.id,
+                    payload=ApprovalGrantedV1(
+                        proposal_id=proposal.id,
+                        approval_id=approval.id,
+                        action_type=action_type,
+                        risk_class=risk.value,
+                        content_hash=content_hash,
+                    ),
+                    occurred_at=now,
+                )
+            else:
+                emit(
+                    session,
+                    event_type="approval.rejected",
+                    tenant_id=case.tenant_id,
+                    aggregate_id=case.id,
+                    payload=ApprovalRejectedV1(proposal_id=proposal.id, approval_id=approval.id),
+                    occurred_at=now,
+                )
 
             if decision is Decision.REJECTED:
                 transition(
