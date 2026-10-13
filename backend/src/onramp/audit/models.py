@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import BigInteger, CheckConstraint, DateTime, ForeignKey, String
+from sqlalchemy import BigInteger, CheckConstraint, DateTime, ForeignKey, Index, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -33,6 +33,8 @@ class AuditEvent(OnrampBase):
             "(actor_type IN ('user', 'marketplace_service')) = (actor_id IS NOT NULL)",
             name="actor_id_matches_type",
         ),
+        # Case timelines read audit events by subject.
+        Index("ix_audit_event_subject", "tenant_id", "subject_type", "subject_id", "id"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
