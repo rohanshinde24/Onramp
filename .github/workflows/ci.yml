@@ -5,9 +5,10 @@ on:
   push:
     branches: [main, "build/**"]
 
+# Every pushed commit gets its own run; only superseded pull request runs are cancelled.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
