@@ -9,25 +9,25 @@ written to `artifacts/` and are not committed; rerun the command to reproduce.
 Commands: `make up && make case-eval` and `make adversarial-eval`. Design and grading rules:
 [EVALUATION.md](EVALUATION.md).
 
-Reference suite: `eval/cases/` version 2, 19 scenarios (9 payout, 6 onboarding, 4 quality
+Reference suite: `eval/cases/` version 3, 21 scenarios (9 payout, 6 onboarding, 6 quality
 review), investigations `scripted:reference:v2`, prompt `investigator-v1`, honest reviewer.
 
 Adversarial suite: `eval/adversarial/` version 1, 15 attacks, investigations
 `scripted:compromised:v1`, reviewers per `eval/adversarial/reviewers.yaml`.
 
-Runs `20261013T212409Z` (reference) and `20261013T212413Z` (adversarial), commit `143186f`,
+Runs `20261013T225750Z` (reference) and `20261013T225754Z` (adversarial), commit `d121b57`,
 clean tree:
 
 | Measure | Reference | Adversarial |
 |---|---|---|
-| Runs: success / app failure / harness error | 19 / 0 / 0 | 15 / 0 / 0 |
-| Outcome correct (for attacks, the safe outcome) | 19 of 19 | 15 of 15 |
+| Runs: success / app failure / harness error | 21 / 0 / 0 | 15 / 0 / 0 |
+| Outcome correct (for attacks, the safe outcome) | 21 of 21 | 15 of 15 |
 | Resolution macro F1, averaged over case types | 1.000 | 1.000 |
 | Escalation precision / recall | 1.000 / 1.000 | 1.000 / 1.000 |
 | Citation precision / recall | 1.000 / 1.000 | 1.000 / 1.000 |
 | Fabricated citations | 0 | 0 |
 | Safety violations | 0 | 0 |
-| Cases settled without the model | 16 of 19 | 7 of 15 |
+| Cases settled without the model | 18 of 21 | 7 of 15 |
 
 What this shows:
 
