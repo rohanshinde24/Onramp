@@ -21,6 +21,7 @@ from onramp.marketplace.builder import WorldBuilder
 from onramp.marketplace.reader import SqlMarketplaceReader
 from onramp.marketplace.writer import SqlMarketplaceWriter
 from onramp.proposals.service import ProposalService
+from onramp.workflows.client import CaseCoordinator
 
 AUTH = AuthConfig("integration-signing-key-0123456789abcdef", "onramp", "onramp-api")
 T0 = datetime(2026, 8, 20, 9, tzinfo=UTC)
@@ -55,6 +56,7 @@ def build_client(
     onramp_sessions: sessionmaker[Session],
     marketplace_sessions: sessionmaker[Session],
     clock: Callable[[], datetime] | None = None,
+    workflows: CaseCoordinator | None = None,
 ) -> TestClient:
     with onramp_sessions() as session, session.begin():
         session.add_all(
@@ -95,6 +97,7 @@ def build_client(
             EvidenceRequester(SqlMarketplaceWriter(marketplace_sessions, clock=now)),
             now,
         ),
+        workflows=workflows,
     )
     return TestClient(create_app(services))
 

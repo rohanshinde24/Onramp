@@ -210,3 +210,48 @@ def test_database_outage_stops_the_consumer_instead_of_parking(
 
     assert dlq.parked == []
     assert source.committed == []  # redelivered after restart
+
+
+class PostCommitHandler(AuditingHandler):
+    def __init__(self) -> None:
+        super().__init__()
+        self.after_commit_calls: list[str] = []
+        self.fail_once = True
+
+    def after_commit(self, envelope: EventEnvelope, sessions: sessionmaker[Session]) -> None:
+        self.after_commit_calls.append(envelope.event_id)
+        if self.fail_once:
+            self.fail_once = False
+            raise ConnectionError("Temporal unavailable")
+
+
+def test_post_commit_effect_retries_after_database_claim_without_committing_offset(
+    sessions: sessionmaker[Session],
+) -> None:
+    handler = PostCommitHandler()
+    runner, source, _ = _runner(sessions, handler)
+
+    with pytest.raises(ConnectionError, match="Temporal unavailable"):
+        runner.process(_message(0))
+
+    assert _effects(sessions) == 1
+    assert source.committed == []
+    assert runner.process(_message(0)) is Outcome.DUPLICATE
+    assert handler.after_commit_calls == ["evt_1", "evt_1"]
+    assert _effects(sessions) == 1
+    assert source.committed == [0]
+
+
+def test_post_commit_hook_does_not_run_for_ignored_events(
+    sessions: sessionmaker[Session],
+) -> None:
+    handler = PostCommitHandler()
+    runner, source, _ = _runner(sessions, handler)
+
+    outcome = runner.process(
+        _message(0, event_type="case.resolved", payload={"resolution_code": "PAID_IN_FULL"})
+    )
+
+    assert outcome is Outcome.IGNORED
+    assert handler.after_commit_calls == []
+    assert source.committed == [0]

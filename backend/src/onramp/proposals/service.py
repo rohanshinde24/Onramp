@@ -20,6 +20,8 @@ from onramp.cases.resolutions import ACTION_RISK, ActionType, required_action
 from onramp.cases.service import StaleCaseError, transition
 from onramp.cases.state import CaseState
 from onramp.db.types import new_id
+from onramp.events.contracts import ProposalDecidedV1
+from onramp.events.outbox import emit
 from onramp.identity.models import Tenant
 from onramp.identity.principal import Principal
 from onramp.identity.roles import Permission
@@ -185,6 +187,14 @@ class ProposalService:
                 reason="proposal_rejected",
                 details={"proposal_id": proposal.id, "note": note},
             )
+            emit(
+                session,
+                event_type="proposal.rejected",
+                tenant_id=case.tenant_id,
+                aggregate_id=case.id,
+                payload=ProposalDecidedV1(proposal_id=proposal.id),
+                occurred_at=now,
+            )
             return proposal
 
     def _pending(
@@ -209,6 +219,14 @@ class ProposalService:
         note: str | None,
     ) -> None:
         _decide(proposal, ProposalStatus.ACCEPTED, actor, now, note)
+        emit(
+            session,
+            event_type="proposal.accepted",
+            tenant_id=case.tenant_id,
+            aggregate_id=case.id,
+            payload=ProposalDecidedV1(proposal_id=proposal.id),
+            occurred_at=now,
+        )
         if proposal.action_type is None:
             case.resolution_code = proposal.resolution_code
             transition(

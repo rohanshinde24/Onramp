@@ -18,6 +18,7 @@ from onramp.events.kafka import (
 from onramp.marketplace.reader import SqlMarketplaceReader
 from onramp.telemetry.logging import configure_logging
 from onramp.telemetry.tracing import configure_tracing
+from onramp.workflows.client import TemporalCaseCoordinator
 
 log = logging.getLogger("onramp.event_consumer")
 REPORT_INTERVAL_S = 15.0
@@ -33,7 +34,15 @@ def main() -> None:
 
     engine = make_engine(str(settings.database_url))
     marketplace_engine = make_engine(str(settings.marketplace_database_url))
-    handler = CaseEvidenceHandler(SqlMarketplaceReader(make_session_factory(marketplace_engine)))
+    coordinator = TemporalCaseCoordinator(
+        settings.temporal_address,
+        settings.temporal_namespace,
+        settings.temporal_workflow_task_queue,
+        settings.temporal_agent_task_queue,
+    )
+    handler = CaseEvidenceHandler(
+        SqlMarketplaceReader(make_session_factory(marketplace_engine)), coordinator=coordinator
+    )
     client_id = f"{settings.kafka_client_id}-{handler.group}"
     source = KafkaMessageSource(
         consumer_config(bootstrap, handler.group, client_id), handler.topics
@@ -52,6 +61,7 @@ def main() -> None:
     try:
         runner.run_until_stopped(stop, on_tick=report, tick_interval_s=REPORT_INTERVAL_S)
     finally:
+        coordinator.close()
         engine.dispose()
         marketplace_engine.dispose()
         provider.shutdown()

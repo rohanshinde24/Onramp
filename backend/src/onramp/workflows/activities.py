@@ -1,7 +1,7 @@
 """Retry-safe Temporal activities over authoritative application services."""
 
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
@@ -22,6 +22,7 @@ from onramp.proposals.models import Proposal
 from onramp.workflows.contracts import CaseSnapshot, CaseWorkflowInput
 
 Clock = Callable[[], datetime]
+EVIDENCE_WAIT_TIMEOUT = timedelta(days=7)
 
 
 def _utcnow() -> datetime:
@@ -66,6 +67,28 @@ class WorkflowActivities:
                     actor=Actor.system(),
                     occurred_at=self._clock(),
                     reason="settlement_deadline_reached",
+                )
+        return self.read_case(request)
+
+    @activity.defn(name="expire_evidence_wait")
+    def expire_evidence_wait(self, request: CaseWorkflowInput) -> CaseSnapshot:
+        with self._sessions() as session, session.begin():
+            case = get_case(session, request.tenant_id, request.case_id)
+            deadline = _evidence_deadline(session, case)
+            if (
+                case.state == CaseState.WAITING_FOR_EVIDENCE
+                and deadline is not None
+                and self._clock() >= deadline
+            ):
+                now = self._clock()
+                case.escalation_reason = EscalationReason.EVIDENCE_TIMEOUT.value
+                transition(
+                    session,
+                    case,
+                    CaseState.ESCALATED,
+                    actor=Actor.system(),
+                    occurred_at=now,
+                    reason=EscalationReason.EVIDENCE_TIMEOUT.value,
                 )
         return self.read_case(request)
 
@@ -138,6 +161,25 @@ def _snapshot(session: Session, case: SupportCase) -> CaseSnapshot:
     )
     return CaseSnapshot(
         state=case.state,
-        wait_until=latest_check.wait_until if latest_check else None,
+        wait_until=(
+            latest_check.wait_until
+            if latest_check and latest_check.wait_until is not None
+            else _evidence_deadline(session, case, latest_check)
+        ),
         proposal_id=proposal_id,
     )
+
+
+def _evidence_deadline(
+    session: Session, case: SupportCase, latest_check: CheckRun | None = None
+) -> datetime | None:
+    if case.state != CaseState.WAITING_FOR_EVIDENCE:
+        return None
+    if latest_check is None:
+        latest_check = session.scalar(
+            select(CheckRun)
+            .filter_by(tenant_id=case.tenant_id, case_id=case.id)
+            .order_by(CheckRun.created_at.desc(), CheckRun.id.desc())
+            .limit(1)
+        )
+    return latest_check.created_at + EVIDENCE_WAIT_TIMEOUT if latest_check else None

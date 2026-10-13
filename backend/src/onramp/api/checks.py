@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from onramp.api.auth import CurrentPrincipal, get_services
 from onramp.api.services import AppServices
+from onramp.api.workflow_notifications import signal_case
 from onramp.audit.service import Actor
 from onramp.cases.queries import get_case
 from onramp.checks.models import CheckRun
@@ -55,6 +56,13 @@ def run_checks(
         case_id,
         Actor.user(principal.user_id),
         expected_version=body.expected_version,
+    )
+    signal_case(
+        services.workflows,
+        principal.tenant_id,
+        case_id,
+        "case_changed",
+        f"direct:check:{run.id}",
     )
     return CheckRunView.of(run)
 

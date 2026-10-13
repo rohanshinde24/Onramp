@@ -7,7 +7,9 @@ from sqlalchemy import select
 
 from onramp.api.auth import CurrentPrincipal, get_services
 from onramp.api.services import AppServices
+from onramp.api.workflow_notifications import signal_case
 from onramp.cases.queries import get_case
+from onramp.events.models import OutboxEvent
 from onramp.identity.roles import Permission
 from onramp.proposals.content import ProposalRequest
 from onramp.proposals.models import Proposal
@@ -67,6 +69,13 @@ def propose(
     proposal = services.proposals.propose(
         principal, case_id, body.proposal, expected_version=body.expected_version
     )
+    signal_case(
+        services.workflows,
+        principal.tenant_id,
+        proposal.case_id,
+        "case_changed",
+        _decision_event_id(services, principal.tenant_id, proposal, "proposal.accepted"),
+    )
     return ProposalView.of(proposal)
 
 
@@ -89,13 +98,44 @@ def list_proposals(
 def accept(
     proposal_id: str, body: DecisionBody, principal: CurrentPrincipal, services: Services
 ) -> ProposalView:
-    return ProposalView.of(
-        services.proposals.accept(principal, proposal_id, note=body.note or None)
+    proposal = services.proposals.accept(principal, proposal_id, note=body.note or None)
+    signal_case(
+        services.workflows,
+        principal.tenant_id,
+        proposal.case_id,
+        "case_changed",
+        _decision_event_id(services, principal.tenant_id, proposal, "proposal.accepted"),
     )
+    return ProposalView.of(proposal)
 
 
 @router.post("/proposals/{proposal_id}/reject", response_model=ProposalView)
 def reject(
     proposal_id: str, body: RejectBody, principal: CurrentPrincipal, services: Services
 ) -> ProposalView:
-    return ProposalView.of(services.proposals.reject(principal, proposal_id, note=body.note))
+    proposal = services.proposals.reject(principal, proposal_id, note=body.note)
+    signal_case(
+        services.workflows,
+        principal.tenant_id,
+        proposal.case_id,
+        "case_changed",
+        _decision_event_id(services, principal.tenant_id, proposal, "proposal.rejected"),
+    )
+    return ProposalView.of(proposal)
+
+
+def _decision_event_id(
+    services: AppServices, tenant_id: str, proposal: Proposal, event_type: str
+) -> str:
+    with services.sessions() as session:
+        event_id = session.scalar(
+            select(OutboxEvent.event_id).where(
+                OutboxEvent.tenant_id == tenant_id,
+                OutboxEvent.aggregate_id == proposal.case_id,
+                OutboxEvent.event_type == event_type,
+                OutboxEvent.envelope["payload"]["proposal_id"].as_string() == proposal.id,
+            )
+        )
+    if event_id is None:
+        raise RuntimeError(f"missing {event_type} event for {proposal.id}")
+    return event_id

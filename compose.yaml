@@ -188,6 +188,23 @@ services:
         condition: service_completed_successfully
       kafka-topics:
         condition: service_completed_successfully
+      temporal:
+        condition: service_healthy
+    stop_grace_period: 30s
+
+  case-signal-consumer:
+    profiles: ["app"]
+    restart: unless-stopped
+    build: ./backend
+    command: ["onramp-case-signal-consumer"]
+    environment: *app-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      kafka-topics:
+        condition: service_completed_successfully
+      temporal:
+        condition: service_healthy
     stop_grace_period: 30s
 
   marketplace-relay:

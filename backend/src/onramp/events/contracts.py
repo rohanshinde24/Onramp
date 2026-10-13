@@ -54,6 +54,10 @@ class ApprovalRejectedV1(Payload):
     approval_id: str
 
 
+class ProposalDecidedV1(Payload):
+    proposal_id: str
+
+
 class ActionExecutedV1(Payload):
     action_id: str
     proposal_id: str
@@ -126,6 +130,8 @@ CONTRACTS: dict[tuple[str, int], Contract] = {
         Contract("case.closed", 1, "onramp.cases", "case", CaseClosedV1),
         Contract("approval.granted", 1, "onramp.actions", "case", ApprovalGrantedV1),
         Contract("approval.rejected", 1, "onramp.actions", "case", ApprovalRejectedV1),
+        Contract("proposal.accepted", 1, "onramp.actions", "case", ProposalDecidedV1),
+        Contract("proposal.rejected", 1, "onramp.actions", "case", ProposalDecidedV1),
         Contract("action.executed", 1, "onramp.actions", "case", ActionExecutedV1),
         Contract("action.failed", 1, "onramp.actions", "case", ActionFailedV1),
         Contract("payment.authorized", 1, "marketplace.payments", "payment", PaymentAuthorizedV1),

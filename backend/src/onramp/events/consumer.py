@@ -116,9 +116,23 @@ class ConsumerRunner:
     def process(self, message: RawMessage) -> Outcome:
         """Handle one message completely, including its offset commit."""
         outcome = self._outcome(message)
+        self._after_commit(message, outcome)
         self._source.commit(message)
         self.stats.add(outcome)
         return outcome
+
+    def _after_commit(self, message: RawMessage, outcome: Outcome) -> None:
+        hook = getattr(self._handler, "after_commit", None)
+        if hook is None or outcome not in {Outcome.APPLIED, Outcome.DUPLICATE}:
+            return
+        # Parsing already succeeded in _outcome. Repeat it here so the external effect happens
+        # only after the database transaction committed. On failure the Kafka offset remains
+        # uncommitted; redelivery repeats this hook even when the database claim is a duplicate.
+        envelope = EventEnvelope.from_json(message.value)
+        versions = self._handler.handles.get(envelope.event_type)
+        if versions is None or envelope.schema_version not in versions:
+            return
+        hook(envelope, self._sessions)
 
     def run_until_stopped(
         self,

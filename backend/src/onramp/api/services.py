@@ -6,6 +6,7 @@ from onramp.approvals.service import ApprovalService
 from onramp.cases.service import CaseService
 from onramp.checks.service import CheckService
 from onramp.proposals.service import ProposalService
+from onramp.workflows.client import CaseCoordinator
 
 
 @dataclass(frozen=True)
@@ -25,3 +26,4 @@ class AppServices:
     proposals: ProposalService
     approvals: ApprovalService
     checks: CheckService
+    workflows: CaseCoordinator | None = None

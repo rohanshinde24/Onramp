@@ -22,6 +22,7 @@ ENTRYPOINTS = [
     "onramp.entrypoints.retrieval_eval",
     "onramp.entrypoints.workflow_worker",
     "onramp.entrypoints.agent_worker",
+    "onramp.entrypoints.case_signal_consumer",
 ]
 
 

@@ -100,3 +100,45 @@ def test_settlement_deadline_uses_time_skipping() -> None:
                 assert plan.resumed
 
     asyncio.run(scenario())
+
+
+class _EvidenceTimerPlan:
+    def __init__(self) -> None:
+        self.expired = False
+        self.deadline = datetime.now(UTC) + timedelta(days=7)
+
+    @activity.defn(name="read_case")
+    async def read_case(self, _: CaseWorkflowInput) -> CaseSnapshot:
+        if self.expired:
+            return CaseSnapshot(CaseState.ESCALATED.value)
+        return CaseSnapshot(CaseState.WAITING_FOR_EVIDENCE.value, wait_until=self.deadline)
+
+    @activity.defn(name="expire_evidence_wait")
+    async def expire_evidence_wait(self, _: CaseWorkflowInput) -> CaseSnapshot:
+        self.expired = True
+        return CaseSnapshot(CaseState.ESCALATED.value)
+
+
+def test_evidence_deadline_uses_time_skipping() -> None:
+    async def scenario() -> None:
+        async with await WorkflowEnvironment.start_time_skipping() as environment:
+            plan = _EvidenceTimerPlan()
+            async with Worker(
+                environment.client,
+                task_queue=WORKFLOW_TASK_QUEUE,
+                workflows=[CaseWorkflow],
+                activities=[plan.read_case, plan.expire_evidence_wait],
+            ):
+                request = CaseWorkflowInput("acme", "case_evidence_timer")
+                handle = await environment.client.start_workflow(
+                    CaseWorkflow.run,
+                    request,
+                    id=case_workflow_id(request.case_id),
+                    task_queue=WORKFLOW_TASK_QUEUE,
+                )
+                await environment.sleep(timedelta(days=8))
+
+                assert await handle.query(CaseWorkflow.applied_signal_ids) == []
+                assert plan.expired
+
+    asyncio.run(scenario())

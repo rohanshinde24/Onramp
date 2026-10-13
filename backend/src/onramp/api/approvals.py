@@ -3,10 +3,14 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
 
 from onramp.api.auth import CurrentPrincipal, get_services
 from onramp.api.services import AppServices
+from onramp.api.workflow_notifications import signal_case
 from onramp.approvals.models import Approval, Decision
+from onramp.events.models import OutboxEvent
+from onramp.proposals.models import Proposal
 
 router = APIRouter(tags=["approvals"])
 Services = Annotated[AppServices, Depends(get_services)]
@@ -46,4 +50,31 @@ def decide(
     approval = services.approvals.decide(
         principal, proposal_id, body.decision, content_hash=body.content_hash, note=body.note
     )
+    with services.sessions() as session:
+        case_id = session.scalar(
+            select(Proposal.case_id).filter_by(
+                tenant_id=principal.tenant_id, id=approval.proposal_id
+            )
+        )
+        event_id = session.scalar(
+            select(OutboxEvent.event_id).where(
+                OutboxEvent.tenant_id == principal.tenant_id,
+                OutboxEvent.aggregate_id == case_id,
+                OutboxEvent.event_type
+                == (
+                    "approval.granted"
+                    if approval.decision == Decision.APPROVED
+                    else "approval.rejected"
+                ),
+                OutboxEvent.envelope["payload"]["approval_id"].as_string() == approval.id,
+            )
+        )
+    if case_id is not None and event_id is not None:
+        signal_case(
+            services.workflows,
+            principal.tenant_id,
+            case_id,
+            "approval_decided",
+            event_id,
+        )
     return ApprovalView.of(approval)

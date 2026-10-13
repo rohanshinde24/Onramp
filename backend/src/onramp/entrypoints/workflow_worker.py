@@ -16,6 +16,8 @@ from onramp.telemetry.logging import configure_logging
 from onramp.telemetry.tracing import configure_tracing
 from onramp.workflows.activities import WorkflowActivities
 from onramp.workflows.case import CaseWorkflow
+from onramp.workflows.client import TemporalCaseCoordinator
+from onramp.workflows.reconcile import reconcile_case_workflows
 
 log = logging.getLogger("onramp.workflow_worker")
 
@@ -35,6 +37,15 @@ def main() -> None:
         CheckService(sessions, marketplace, EvidenceRequester(writer)),
         ActionGateway(sessions, marketplace, writer),
     )
+    coordinator = TemporalCaseCoordinator(
+        settings.temporal_address,
+        settings.temporal_namespace,
+        settings.temporal_workflow_task_queue,
+        settings.temporal_agent_task_queue,
+    )
+    recovered = reconcile_case_workflows(sessions, coordinator)
+    coordinator.close()
+    log.info("workflow reconciliation complete open_cases=%d", recovered)
     log.info("workflow worker started queue=%s", settings.temporal_workflow_task_queue)
     try:
         asyncio.run(
@@ -47,6 +58,7 @@ def main() -> None:
                     activities.read_case,
                     activities.run_case_checks,
                     activities.resume_settlement_checks,
+                    activities.expire_evidence_wait,
                     activities.execute_approved_action,
                     activities.recover_action_verification,
                 ],

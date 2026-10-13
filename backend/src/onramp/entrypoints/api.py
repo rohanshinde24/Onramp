@@ -4,6 +4,8 @@ Uvicorn handles SIGTERM by refusing new connections and letting in-flight reques
 within the graceful timeout.
 """
 
+import logging
+
 import uvicorn
 
 import onramp.models  # noqa: F401 - every table must be mapped before any session is used
@@ -21,6 +23,9 @@ from onramp.marketplace.writer import SqlMarketplaceWriter
 from onramp.proposals.service import ProposalService
 from onramp.telemetry.logging import configure_logging
 from onramp.telemetry.tracing import configure_tracing
+from onramp.workflows.client import TemporalCaseCoordinator
+
+log = logging.getLogger("onramp.api")
 
 
 def main() -> None:
@@ -32,6 +37,16 @@ def main() -> None:
     sessions = make_session_factory(engine)
     marketplace_sessions = make_session_factory(marketplace_engine)
     marketplace_reader = SqlMarketplaceReader(marketplace_sessions)
+    workflows = None
+    try:
+        workflows = TemporalCaseCoordinator(
+            settings.temporal_address,
+            settings.temporal_namespace,
+            settings.temporal_workflow_task_queue,
+            settings.temporal_agent_task_queue,
+        )
+    except Exception:
+        log.exception("Temporal unavailable at startup; durable event fallback remains active")
     services = AppServices(
         sessions=sessions,
         auth=AuthConfig(
@@ -47,6 +62,7 @@ def main() -> None:
             marketplace_reader,
             EvidenceRequester(SqlMarketplaceWriter(marketplace_sessions)),
         ),
+        workflows=workflows,
     )
     app = create_app(
         services,
@@ -64,6 +80,8 @@ def main() -> None:
             timeout_graceful_shutdown=20,
         )
     finally:
+        if workflows is not None:
+            workflows.close()
         engine.dispose()
         marketplace_engine.dispose()
         provider.shutdown()

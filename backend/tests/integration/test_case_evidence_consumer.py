@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from onramp.audit.models import AuditEvent
-from onramp.cases.evidence_consumer import CaseEvidenceHandler
+from onramp.cases.evidence_consumer import CaseEvidenceHandler, CaseSignaler
 from onramp.cases.models import CaseType, SupportCase
 from onramp.cases.service import CaseService, IntakeRequest
 from onramp.cases.state import CaseState
@@ -27,6 +27,17 @@ from tests.integration.test_consumer_runner import FakeDeadLetters, FakeSource
 T0 = datetime(2026, 8, 20, 9, tzinfo=UTC)
 SERVICE = Principal("acme", "usr_svc", Role.MARKETPLACE_SERVICE)
 World = tuple[sessionmaker[Session], sessionmaker[Session]]
+
+
+class RecordingCoordinator:
+    def __init__(self) -> None:
+        self.signals: list[tuple[str, str, str, str]] = []
+
+    def start_case(self, tenant_id: str, case_id: str) -> None:
+        raise AssertionError("evidence delivery only signals existing workflows")
+
+    def signal_case(self, tenant_id: str, case_id: str, signal: str, event_id: str) -> None:
+        self.signals.append((tenant_id, case_id, signal, event_id))
 
 
 @pytest.fixture
@@ -56,14 +67,16 @@ def _open(world: World, case_type: CaseType, subject: str) -> str:
     return service.open_case(SERVICE, request).case.id
 
 
-def _deliver(world: World) -> list[Outcome]:
+def _deliver(world: World, coordinator: CaseSignaler | None = None) -> list[Outcome]:
     """Feed every marketplace outbox row through the consumer, as Kafka would."""
     onramp, marketplace = world
     runner = ConsumerRunner(
         onramp,
         FakeSource(),
         FakeDeadLetters(),
-        CaseEvidenceHandler(SqlMarketplaceReader(marketplace), clock=lambda: T0),
+        CaseEvidenceHandler(
+            SqlMarketplaceReader(marketplace), clock=lambda: T0, coordinator=coordinator
+        ),
         sleep=lambda _: None,
     )
     with marketplace() as session:
@@ -110,6 +123,20 @@ def test_uploaded_document_resumes_case_waiting_for_evidence(world: World) -> No
     assert len(arrived) == 1
     assert arrived[0].details["evidence_ref"].startswith("document:")
     assert arrived[0].causation_id is not None
+
+
+def test_evidence_signal_is_sent_after_the_case_transition_commits(world: World) -> None:
+    onramp, marketplace = world
+    case_id = _open(world, CaseType.ONBOARDING, "w_new")
+    move_case(onramp, case_id, CaseState.INITIAL_CHECKS, CaseState.WAITING_FOR_EVIDENCE)
+    MarketplaceActivity(marketplace, lambda: T0).upload_document("acme", "w_new", "tax_form", "x")
+    coordinator = RecordingCoordinator()
+
+    assert _deliver(world, coordinator) == [Outcome.APPLIED]
+
+    assert coordinator.signals == [
+        ("acme", case_id, "evidence_arrived", _timeline(onramp, case_id)[-1].causation_id)
+    ]
 
 
 def test_redelivered_evidence_event_resumes_only_once(world: World) -> None:

@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from onramp.api.auth import CurrentPrincipal, get_services
 from onramp.api.services import AppServices
+from onramp.api.workflow_notifications import signal_case, start_case
 from onramp.cases import queries
 from onramp.cases.escalation import EscalationReason
 from onramp.cases.models import CaseType, SupportCase
@@ -86,6 +87,7 @@ def open_case(
     body: IntakeRequest, principal: CurrentPrincipal, services: Services, response: Response
 ) -> IntakeResponse:
     result = services.cases.open_case(principal, body)
+    start_case(services.workflows, principal.tenant_id, result.case.id)
     response.status_code = status.HTTP_201_CREATED if result.created else status.HTTP_200_OK
     return IntakeResponse(
         case=CaseView.of(result.case),
@@ -154,6 +156,13 @@ def escalate(
     case = services.cases.escalate(
         principal, case_id, body.reason, expected_version=body.expected_version, note=body.note
     )
+    signal_case(
+        services.workflows,
+        principal.tenant_id,
+        case.id,
+        "operator_escalated",
+        f"direct:case:{case.id}:v{case.version}",
+    )
     return CaseView.of(case)
 
 
@@ -170,6 +179,13 @@ def close(
 ) -> CaseView:
     case = services.cases.close_without_action(
         principal, case_id, expected_version=body.expected_version, note=body.note
+    )
+    signal_case(
+        services.workflows,
+        principal.tenant_id,
+        case.id,
+        "case_changed",
+        f"direct:case:{case.id}:v{case.version}",
     )
     return CaseView.of(case)
 

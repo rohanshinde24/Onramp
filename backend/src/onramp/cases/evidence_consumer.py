@@ -10,10 +10,12 @@ re-read rules stay the same.
 
 from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import Protocol
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
+from onramp.audit.models import AuditEvent
 from onramp.audit.service import Actor, record_audit
 from onramp.cases.models import CaseType, SupportCase
 from onramp.cases.service import transition
@@ -29,6 +31,11 @@ from onramp.marketplace.reader import MarketplaceReader
 
 Clock = Callable[[], datetime]
 
+
+class CaseSignaler(Protocol):
+    def signal_case(self, tenant_id: str, case_id: str, signal: str, event_id: str) -> None: ...
+
+
 # Which waiting state a kind of evidence can end.
 _RESUMES = {
     CaseState.WAITING_FOR_EVIDENCE: CaseState.INVESTIGATING,
@@ -43,15 +50,37 @@ def _utcnow() -> datetime:
 class CaseEvidenceHandler:
     group = "onramp-case-evidence"
 
-    def __init__(self, marketplace: MarketplaceReader, clock: Clock = _utcnow) -> None:
+    def __init__(
+        self,
+        marketplace: MarketplaceReader,
+        clock: Clock = _utcnow,
+        coordinator: CaseSignaler | None = None,
+    ) -> None:
         self._marketplace = marketplace
         self._clock = clock
+        self._coordinator = coordinator
         self.topics = ("marketplace.workers", "marketplace.payments")
         self.handles = {
             "evidence.uploaded": frozenset({1}),
             "payment.settled": frozenset({1}),
             "payment.settlement_failed": frozenset({1}),
         }
+
+    def after_commit(self, envelope: EventEnvelope, sessions: sessionmaker[Session]) -> None:
+        if self._coordinator is None:
+            return
+        with sessions() as session:
+            case_id = session.scalar(
+                select(AuditEvent.subject_id).where(
+                    AuditEvent.tenant_id == envelope.tenant_id,
+                    AuditEvent.action == "case.evidence_arrived",
+                    AuditEvent.causation_id == envelope.event_id,
+                )
+            )
+        if case_id is not None:
+            self._coordinator.signal_case(
+                envelope.tenant_id, case_id, "evidence_arrived", envelope.event_id
+            )
 
     def handle(self, session: Session, envelope: EventEnvelope) -> None:
         payload = parse_payload(envelope)

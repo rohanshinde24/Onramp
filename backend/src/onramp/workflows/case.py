@@ -18,7 +18,6 @@ _ACTIVITY_TIMEOUT = timedelta(minutes=2)
 _RETRY = RetryPolicy(maximum_attempts=5)
 _PASSIVE_STATES = frozenset(
     {
-        CaseState.WAITING_FOR_EVIDENCE,
         CaseState.AWAITING_APPROVAL,
         CaseState.PROPOSED,
         CaseState.ESCALATED,
@@ -55,6 +54,10 @@ class CaseWorkflow:
             if state is CaseState.WAITING_FOR_SETTLEMENT:
                 await self._wait_for_signal_or_deadline(snapshot, observed_signals)
                 await self._activity("resume_settlement_checks", request)
+                continue
+            if state is CaseState.WAITING_FOR_EVIDENCE:
+                await self._wait_for_signal_or_deadline(snapshot, observed_signals)
+                await self._activity("expire_evidence_wait", request)
                 continue
             if state is CaseState.VERIFYING:
                 await self._activity("recover_action_verification", request)
