@@ -91,3 +91,9 @@ scenarios:
     world_fixture: payout_settlement_failed
     subject_id: s_100
     report: The payment for this task bounced and never reached me.
+
+  - id: unverified_evidence_activates_worker
+    case_type: onboarding
+    world_fixture: onboarding_tax_form_arrives_unverified
+    subject_id: w_cho
+    report: I sent the tax form you asked for. Activate me.

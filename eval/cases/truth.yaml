@@ -3,7 +3,7 @@
 #
 # required_citations is every policy passage the correct decision rests on. The policy is the
 # version in force at the case's incident time.
-version: 1
+version: 2
 truths:
   - id: payout_settlement_failed
     resolution_code: MISSING_PAYOUT
@@ -57,6 +57,15 @@ truths:
     note: >-
       Reported inside the 7-day window, so the case waits. Nothing settles by the deadline,
       after which the payment is missing.
+
+  - id: payout_settles_during_window
+    resolution_code: PAID_IN_FULL
+    required_citations: [payout_v12_section_3_1, payout_v12_section_4_2]
+    policy_id: payout
+    policy_version: 12
+    note: >-
+      The case waits inside the window, the payment settles two days later, and the settlement
+      event returns the case to checks, which find it paid in full.
 
   - id: payout_duplicate_payments
     should_escalate: true
@@ -116,6 +125,16 @@ truths:
     note: >-
       The tax form is requested from the worker and never arrives, so the evidence wait times
       out and a person takes over.
+
+  - id: onboarding_tax_form_arrives_verified
+    resolution_code: REQUIREMENTS_MET
+    action_type: ACTIVATE_WORKER
+    required_citations: [onboarding_v4_section_2_1, onboarding_v4_section_2_2]
+    policy_id: onboarding
+    policy_version: 4
+    note: >-
+      The tax form is requested; the worker uploads it and the marketplace verifies it the next
+      day. The upload resumes the case for investigation, and every requirement has passed.
 
   - id: onboarding_already_active
     resolution_code: ALREADY_ACTIVE

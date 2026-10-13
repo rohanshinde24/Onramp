@@ -7,6 +7,7 @@ from typing import Protocol
 from onramp.actions.gateway import ActionGateway
 from onramp.agent.model import ChatModel
 from onramp.approvals.service import ApprovalService
+from onramp.cases.evidence_consumer import CaseEvidenceHandler
 from onramp.cases.service import CaseService
 from onramp.proposals.service import ProposalService
 from onramp.workflows.activities import AgentActivities, WorkflowActivities
@@ -39,6 +40,8 @@ class CaseServices:
     approvals: ApprovalService
     # The same gateway the workflow activities use, for replaying an execution directly.
     gateway: ActionGateway
+    # Delivers marketplace events to cases, as the event consumer does.
+    evidence: CaseEvidenceHandler
 
 
 class ServiceFactory(Protocol):

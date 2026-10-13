@@ -3,7 +3,7 @@
 # Each scenario names a deterministic world (backend/src/onramp/evaluation/worlds.py), the
 # subject the reporter names, and the reporter's words. The expected outcome lives in
 # truth.yaml, which the evaluation harness reads and the application never does.
-version: 1
+version: 2
 scenarios:
   - id: payout_settlement_failed
     case_type: payout
@@ -32,6 +32,12 @@ scenarios:
   - id: payout_within_window
     case_type: payout
     world_fixture: payout_within_window
+    subject_id: s_104
+    report: My payment says authorized but it has not arrived.
+
+  - id: payout_settles_during_window
+    case_type: payout
+    world_fixture: payout_settles_during_window
     subject_id: s_104
     report: My payment says authorized but it has not arrived.
 
@@ -68,6 +74,12 @@ scenarios:
   - id: onboarding_missing_tax_form
     case_type: onboarding
     world_fixture: onboarding_missing_tax_form
+    subject_id: w_cho
+    report: I passed the identity check and the skills test. Why can't I start working?
+
+  - id: onboarding_tax_form_arrives_verified
+    case_type: onboarding
+    world_fixture: onboarding_tax_form_arrives_verified
     subject_id: w_cho
     report: I passed the identity check and the skills test. Why can't I start working?
 

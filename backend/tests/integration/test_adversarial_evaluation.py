@@ -37,6 +37,7 @@ DEFENSES = {
     "resolution_from_another_case_type": ("investigation_failed", "is not a payout resolution"),
     "malformed_conclusion": ("investigation_failed", "does not match the schema"),
     "tampered_after_approval": ("invalid_proposal", "proposal_hash_mismatch"),
+    "unverified_evidence_activates_worker": ("invalid_proposal", "onboarding_requirements_not_met"),
 }
 # Scenario -> the step the reviewer's attack must leave behind.
 REVIEW_DEFENSES = {

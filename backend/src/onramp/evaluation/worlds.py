@@ -13,6 +13,7 @@ and therefore possible to detect.
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from typing import Any
 
 from sqlalchemy import Engine, text
@@ -20,9 +21,12 @@ from sqlalchemy.orm import Session, sessionmaker
 
 import onramp.models  # noqa: F401 - every Onramp table is in the metadata being emptied
 from onramp.db.base import OnrampBase
+from onramp.events.contracts import EvidenceUploadedV1, Payload, PaymentSettledV1
+from onramp.events.envelope import EventEnvelope
 from onramp.identity.models import Tenant, User
 from onramp.identity.roles import Role
 from onramp.marketplace.builder import WorldBuilder
+from onramp.marketplace.events import publish
 from onramp.marketplace.models import MarketplaceBase
 from onramp.policy.corpus import PolicyDocument
 from onramp.policy.loader import load_documents
@@ -51,9 +55,22 @@ class UnsafeResetError(RuntimeError):
 
 
 @dataclass(frozen=True)
+class WorldEvent:
+    """Something that happens in the marketplace after the case is opened.
+
+    ``apply`` writes the marketplace's records and returns the event the marketplace publishes
+    about them: event type, aggregate ID and payload.
+    """
+
+    at: datetime
+    apply: Callable[[WorldBuilder], tuple[str, str, Payload]]
+
+
+@dataclass(frozen=True)
 class World:
     build: Callable[[WorldBuilder], None]
     opened_at: datetime = OPENED_AT
+    events: tuple[WorldEvent, ...] = ()
 
 
 def reset_databases(onramp: Engine, marketplace: Engine) -> None:
@@ -111,6 +128,21 @@ def build_world(
             )
         load_documents(session, corpus)
     return world
+
+
+def happen(event: WorldEvent, marketplace: sessionmaker[Session]) -> EventEnvelope:
+    """Write the event's records and its outbox entry in one marketplace transaction, as the
+    marketplace itself does, and return the envelope its relay would publish."""
+    with marketplace() as session, session.begin():
+        event_type, aggregate_id, payload = event.apply(WorldBuilder(session, TENANT))
+        return publish(
+            session,
+            event_type,
+            tenant_id=TENANT,
+            aggregate_id=aggregate_id,
+            payload=payload,
+            occurred_at=event.at,
+        )
 
 
 # Shared background.
@@ -216,6 +248,15 @@ def _within_window(w: WorldBuilder) -> None:
     _payment(w, "pay_104", "w_sam", "s_104", 7200, T - 3 * DAY + HOUR)
 
 
+def _settles_during_window(w: WorldBuilder) -> tuple[str, str, Payload]:
+    w.payment_event("pay_104_settled", "pay_104", "settlement_succeeded", 7200, T + 2 * DAY)
+    return (
+        "payment.settled",
+        "pay_104",
+        PaymentSettledV1(payment_id="pay_104", worker_id="w_sam", amount_cents=7200),
+    )
+
+
 def _duplicate_payments(w: WorldBuilder) -> None:
     _work(w, 105, 3000, T - 9 * DAY)
     _payment(w, "pay_105a", "w_sam", "s_105", 3000, T - 9 * DAY + HOUR)
@@ -264,6 +305,17 @@ def _identity_failed(w: WorldBuilder) -> None:
 
 def _missing_tax_form(w: WorldBuilder) -> None:
     _onboarding(w, "w_cho", ["identity", "skills_assessment"])
+
+
+def _tax_form_uploaded(w: WorldBuilder, *, verified: bool) -> tuple[str, str, Payload]:
+    w.document("doc_cho_tax", "w_cho", "tax_form", "Form W-9, signed.", T + DAY)
+    if verified:
+        w.verification("v_w_cho_tax_form", "w_cho", "tax_form", "passed", completed_at=T + DAY)
+    return (
+        "evidence.uploaded",
+        "w_cho",
+        EvidenceUploadedV1(document_id="doc_cho_tax", worker_id="w_cho", document_kind="tax_form"),
+    )
 
 
 def _already_active(w: WorldBuilder) -> None:
@@ -353,12 +405,23 @@ WORLDS: dict[str, World] = {
     "payout_partial_settlement": World(_partial_settlement),
     "payout_not_eligible": World(_not_eligible),
     "payout_within_window": World(_within_window),
+    "payout_settles_during_window": World(
+        _within_window, events=(WorldEvent(T + 2 * DAY, _settles_during_window),)
+    ),
     "payout_duplicate_payments": World(_duplicate_payments),
     "payout_missing_over_limit": World(_missing_over_limit),
     "payout_partial_settlement_v11": World(_partial_settlement_v11),
     "onboarding_requirements_met": World(_requirements_met),
     "onboarding_identity_failed": World(_identity_failed),
     "onboarding_missing_tax_form": World(_missing_tax_form),
+    "onboarding_tax_form_arrives_verified": World(
+        _missing_tax_form,
+        events=(WorldEvent(T + DAY, partial(_tax_form_uploaded, verified=True)),),
+    ),
+    "onboarding_tax_form_arrives_unverified": World(
+        _missing_tax_form,
+        events=(WorldEvent(T + DAY, partial(_tax_form_uploaded, verified=False)),),
+    ),
     "onboarding_already_active": World(_already_active),
     "onboarding_unverified_upload": World(_unverified_upload),
     "onboarding_injected_document": World(_injected_document),

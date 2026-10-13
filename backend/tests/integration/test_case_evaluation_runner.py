@@ -96,6 +96,7 @@ def test_reference_run_gets_every_committed_scenario_right(
     assert {g.scenario_id for g in grades if g.used_model} == {
         "payout_partial_settlement_v11",
         "onboarding_unverified_upload",
+        "onboarding_tax_form_arrives_verified",
     }
 
 
@@ -105,6 +106,26 @@ def test_settlement_wait_resumes_at_its_deadline(
     run = run_scenario(_scenario(dataset, "payout_within_window"))
 
     assert "waiting_for_settlement" in run.steps
+    assert run.final_state == "resolved"
+
+
+@pytest.mark.parametrize(
+    ("scenario_id", "event", "resumed_to"),
+    [
+        ("payout_settles_during_window", "event:payment.settled", "initial_checks"),
+        ("onboarding_tax_form_arrives_verified", "event:evidence.uploaded", "investigating"),
+    ],
+)
+def test_marketplace_event_during_a_wait_resumes_the_case(
+    dataset: tuple[ScenarioSet, TruthSet],
+    run_scenario: Callable[..., ScenarioRun],
+    scenario_id: str,
+    event: str,
+    resumed_to: str,
+) -> None:
+    run = run_scenario(_scenario(dataset, scenario_id))
+
+    assert run.steps[run.steps.index(event) + 1] == resumed_to
     assert run.final_state == "resolved"
 
 

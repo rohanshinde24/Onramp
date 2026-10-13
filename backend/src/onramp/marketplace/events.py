@@ -5,6 +5,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from onramp.events.contracts import Payload
+from onramp.events.envelope import EventEnvelope
 from onramp.events.outbox import OutboxStore, emit
 from onramp.marketplace.models import MarketplaceAggregateSequence, MarketplaceOutboxEvent
 
@@ -21,8 +22,8 @@ def publish(
     aggregate_id: str,
     payload: Payload,
     occurred_at: datetime,
-) -> None:
-    emit(
+) -> EventEnvelope:
+    return emit(
         session,
         event_type=event_type,
         tenant_id=tenant_id,

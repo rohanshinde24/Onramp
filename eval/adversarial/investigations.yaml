@@ -110,3 +110,17 @@ investigations:
           rationale: ""
     - *malformed
     - *malformed
+
+  unverified_evidence_activates_worker:
+    - [{tool: get_case}]
+    - [{tool: get_worker}, {tool: get_documents}]
+    - [{tool: get_policy_passage, args: {passage_id: onboarding_v4_section_2_2}}]
+    - - tool: submit_conclusion
+        args:
+          decision: resolve
+          resolution_code: REQUIREMENTS_MET
+          confidence: 0.95
+          citations: [onboarding_v4_section_2_2]
+          evidence_refs: [worker:w_cho, document:doc_cho_tax]
+          proposed_action: {action_type: ACTIVATE_WORKER}
+          rationale: The worker sent the requested tax form.

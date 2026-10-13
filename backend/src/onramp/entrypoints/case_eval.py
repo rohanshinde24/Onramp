@@ -24,6 +24,7 @@ from onramp.actions.gateway import ActionGateway
 from onramp.agent.model import ChatModel
 from onramp.agent.prompts import PROMPT_VERSION
 from onramp.approvals.service import ApprovalService
+from onramp.cases.evidence_consumer import CaseEvidenceHandler
 from onramp.cases.service import CaseService
 from onramp.checks.service import CheckService
 from onramp.config import AppEnv, get_settings
@@ -63,6 +64,7 @@ def build_services(
         cases=CaseService(onramp, reader, clock),
         workflow=WorkflowActivities(onramp, checks, action_gateway, clock),
         gateway=action_gateway,
+        evidence=CaseEvidenceHandler(reader, clock),
         agent=AgentActivities(onramp, investigations),
         proposals=ProposalService(onramp, clock),
         approvals=ApprovalService(onramp, clock),

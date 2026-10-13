@@ -39,7 +39,7 @@ from onramp.evaluation.reviewers import HonestReviewer, ReviewContext, honest_re
 from onramp.evaluation.safety import safety_violations
 from onramp.evaluation.scenarios import ScenarioInput
 from onramp.evaluation.services import CaseServices, ServiceFactory, VirtualClock
-from onramp.evaluation.worlds import SERVICE, TENANT, build_world
+from onramp.evaluation.worlds import SERVICE, TENANT, WorldEvent, build_world, happen
 from onramp.identity.principal import Principal
 from onramp.identity.roles import Role
 from onramp.policy.corpus import PolicyDocument
@@ -111,7 +111,8 @@ class CaseEvaluationRunner:
         try:
             run.case_id = self._open(services, scenario)
             review = ReviewContext(services, self._onramp, run.case_id, run.steps)
-            run.final_state = self._drive(services, reviewer, review, clock)
+            events = sorted(world.events, key=lambda event: event.at)
+            run.final_state = self._drive(services, reviewer, review, clock, events)
             reviewer.after_stop(review)
             run.status = RunStatus.SUCCESS
         except IntakeError as exc:
@@ -152,6 +153,7 @@ class CaseEvaluationRunner:
         reviewer: HonestReviewer,
         review: ReviewContext,
         clock: VirtualClock,
+        events: list[WorldEvent],
     ) -> str:
         steps = review.steps
         request = CaseWorkflowInput(TENANT, review.case_id)
@@ -172,12 +174,20 @@ class CaseEvaluationRunner:
                     after = services.agent.run_investigation(request)
                     if after.state == CaseState.INVESTIGATING:
                         raise StalledCaseError("investigation did not conclude")
-                case CaseState.WAITING_FOR_SETTLEMENT:
-                    clock.advance_to(_deadline(snapshot))
-                    workflow.resume_settlement_checks(request)
-                case CaseState.WAITING_FOR_EVIDENCE:
-                    clock.advance_to(_deadline(snapshot))
-                    workflow.expire_evidence_wait(request)
+                case CaseState.WAITING_FOR_SETTLEMENT | CaseState.WAITING_FOR_EVIDENCE:
+                    deadline = _deadline(snapshot)
+                    if events and events[0].at < deadline:
+                        # Something happens in the marketplace before the wait ends. It reaches
+                        # the case the way the relay and evidence consumer would deliver it.
+                        event = events.pop(0)
+                        clock.advance_to(event.at)
+                        self._deliver(services, event, steps)
+                    else:
+                        clock.advance_to(deadline)
+                        if state is CaseState.WAITING_FOR_SETTLEMENT:
+                            workflow.resume_settlement_checks(request)
+                        else:
+                            workflow.expire_evidence_wait(request)
                 case CaseState.PROPOSED:
                     reviewer.on_proposed(review)
                 case CaseState.AWAITING_APPROVAL:
@@ -194,6 +204,12 @@ class CaseEvaluationRunner:
                 case _:
                     raise StalledCaseError(f"no step for state {state.value}")
         raise StalledCaseError(f"no stopping state within {self._max_steps} steps")
+
+    def _deliver(self, services: CaseServices, event: WorldEvent, steps: list[str]) -> None:
+        envelope = happen(event, self._marketplace)
+        with self._onramp() as session, session.begin():
+            services.evidence.handle(session, envelope)
+        steps.append(f"event:{envelope.event_type}")
 
     def _observe(
         self, scenario: ScenarioInput, case_id: str | None, attacks_allowed: list[str]

@@ -3,7 +3,7 @@
 # Each entry is the tool calls a model would make, one model response per turn, ending with
 # submit_conclusion. Scripts exercise the real investigation graph, its validation and every
 # service after it without a model provider. They measure the application, not a model.
-version: 1
+version: 2
 model: reference
 investigations:
   payout_partial_settlement_v11:
@@ -43,3 +43,25 @@ investigations:
           rationale: >-
             Section 2.2 needs a passed tax form verification. A form was uploaded, but nothing
             has verified it, and reading it is not verifying it. A person should decide.
+
+  onboarding_tax_form_arrives_verified:
+    - [{tool: get_case}]
+    - [{tool: get_worker}, {tool: get_verifications}, {tool: get_documents}]
+    - - {tool: get_policy_passage, args: {passage_id: onboarding_v4_section_2_1}}
+      - {tool: get_policy_passage, args: {passage_id: onboarding_v4_section_2_2}}
+    - - tool: submit_conclusion
+        args:
+          decision: resolve
+          resolution_code: REQUIREMENTS_MET
+          confidence: 0.9
+          reason_codes: [REQUIREMENTS_MET]
+          citations: [onboarding_v4_section_2_1, onboarding_v4_section_2_2]
+          evidence_refs:
+            - worker:w_cho
+            - verification:v_w_cho_identity
+            - verification:v_w_cho_skills_assessment
+            - verification:v_w_cho_tax_form
+          proposed_action: {action_type: ACTIVATE_WORKER}
+          rationale: >-
+            Identity, skills assessment and the tax form section 2.2 requires for US workers
+            have all passed, so section 2.1 activates the worker.
