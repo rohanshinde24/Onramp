@@ -8,6 +8,7 @@ import uvicorn
 
 from onramp.api.app import create_app
 from onramp.api.services import AppServices, AuthConfig
+from onramp.approvals.service import ApprovalService
 from onramp.cases.service import CaseService
 from onramp.config import get_settings
 from onramp.db.engine import make_engine, make_session_factory
@@ -34,6 +35,7 @@ def main() -> None:
         ),
         cases=CaseService(sessions, SqlMarketplaceReader(make_session_factory(marketplace_engine))),
         proposals=ProposalService(sessions),
+        approvals=ApprovalService(sessions),
     )
     app = create_app(
         services,

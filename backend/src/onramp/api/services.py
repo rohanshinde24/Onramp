@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from sqlalchemy.orm import Session, sessionmaker
 
+from onramp.approvals.service import ApprovalService
 from onramp.cases.service import CaseService
 from onramp.proposals.service import ProposalService
 
@@ -21,3 +22,4 @@ class AppServices:
     auth: AuthConfig
     cases: CaseService
     proposals: ProposalService
+    approvals: ApprovalService

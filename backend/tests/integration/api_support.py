@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from onramp.api.app import create_app
 from onramp.api.services import AppServices, AuthConfig
+from onramp.approvals.service import ApprovalService
 from onramp.audit.service import Actor
 from onramp.cases.models import SupportCase
 from onramp.cases.service import CaseService, transition
@@ -84,6 +85,7 @@ def build_client(
         auth=AUTH,
         cases=CaseService(onramp_sessions, reader, now),
         proposals=ProposalService(onramp_sessions, now),
+        approvals=ApprovalService(onramp_sessions, now),
     )
     return TestClient(create_app(services))
 

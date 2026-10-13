@@ -222,7 +222,7 @@ class ProposalService:
             )
             return
 
-        if _over_payout_limit(session, case.tenant_id, proposal):
+        if over_payout_limit(session, case.tenant_id, proposal):
             case.escalation_reason = EscalationReason.AMOUNT_OVER_LIMIT.value
             transition(
                 session,
@@ -255,7 +255,7 @@ def _decide(
     proposal.decision_note = note
 
 
-def _over_payout_limit(session: Session, tenant_id: str, proposal: Proposal) -> bool:
+def over_payout_limit(session: Session, tenant_id: str, proposal: Proposal) -> bool:
     if proposal.action_type != ActionType.PAYOUT_ADJUSTMENT:
         return False
     limit = session.get_one(Tenant, tenant_id).payout_approval_limit_cents

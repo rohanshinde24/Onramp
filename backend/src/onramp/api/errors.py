@@ -7,6 +7,12 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm.exc import StaleDataError
 
 from onramp.api.cases import InvalidCursorError
+from onramp.approvals.service import (
+    AlreadyDecidedError,
+    ContentMismatchError,
+    NotAwaitingApprovalError,
+    SelfApprovalError,
+)
 from onramp.cases.queries import CaseNotFoundError
 from onramp.cases.service import (
     IntakeKeyConflictError,
@@ -35,6 +41,10 @@ _STATUS: dict[type[Exception], tuple[int, str]] = {
     InvalidProposalError: (status.HTTP_422_UNPROCESSABLE_CONTENT, "invalid_proposal"),
     ProposalNotFoundError: (status.HTTP_404_NOT_FOUND, "proposal_not_found"),
     ProposalNotPendingError: (status.HTTP_409_CONFLICT, "proposal_not_pending"),
+    NotAwaitingApprovalError: (status.HTTP_409_CONFLICT, "not_awaiting_approval"),
+    AlreadyDecidedError: (status.HTTP_409_CONFLICT, "already_decided"),
+    ContentMismatchError: (status.HTTP_409_CONFLICT, "content_mismatch"),
+    SelfApprovalError: (status.HTTP_403_FORBIDDEN, "self_approval"),
 }
 
 
