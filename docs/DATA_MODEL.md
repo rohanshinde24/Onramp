@@ -24,10 +24,17 @@ migrations agree and that every chain downgrades to base and back.
 |---|---|---|
 | `tenant` | Marketplace operator using Onramp | `payout_approval_limit_cents > 0` |
 | `app_user` | Operators, leads, admins, service identities | role in the known set; email unique per tenant |
-| `audit_event` | Append-only history of every consequential step | trigger rejects UPDATE and DELETE; user actors must have an ID |
+| `audit_event` | Append-only history of every consequential step; also the case timeline | trigger rejects UPDATE and DELETE; user actors must have an ID |
+| `support_case` | One worker problem under investigation | known type and state; subject type matches case type; one open case per (tenant, type, subject); intake key unique per tenant; optimistic `version` |
+| `proposal` | A proposed resolution and the action it requires | resolution and action from the closed catalogue; risk class present exactly when an action is; one pending proposal per case; `content_hash` over everything an approver approves |
+| `approval` | A person's decision on a proposal's action | one decision per proposal; approver is a user of the same tenant |
 
-Case, evidence, investigation, proposal, approval, action and outbox tables arrive in Phases 5,
-6, 10 and 11 and are added here with them.
+Server-derived fields on `support_case`: `worker_id` (from the subject record) and
+`incident_at` with `incident_basis` (submission time, review time, or report time). The
+reporter's description is stored as untrusted text.
+
+Evidence links, investigations, executed actions and the outbox arrive in Phases 6, 10 and 11
+and are added here with them.
 
 ## marketplace database
 
