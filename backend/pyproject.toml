@@ -25,6 +25,7 @@ dependencies = [
 [project.scripts]
 onramp-api = "onramp.entrypoints.api:main"
 onramp-dev-token = "onramp.entrypoints.dev_token:main"
+onramp-migrate = "onramp.entrypoints.migrate:main"
 
 [project.optional-dependencies]
 dev = [
