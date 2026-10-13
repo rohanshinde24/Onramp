@@ -34,6 +34,7 @@ class MarketplaceReader(Protocol):
     def get_quality_reviews(
         self, tenant_id: str, submission_id: str
     ) -> list[QualityReviewRecord]: ...
+    def get_payment(self, tenant_id: str, payment_id: str) -> PaymentRecord | None: ...
     def get_payments_for_submission(
         self, tenant_id: str, submission_id: str
     ) -> list[PaymentRecord]: ...
@@ -143,6 +144,10 @@ class SqlMarketplaceReader:
                 .order_by(m.QualityReview.reviewed_at, m.QualityReview.id)
             )
             return [_review(r) for r in rows]
+
+    def get_payment(self, tenant_id: str, payment_id: str) -> PaymentRecord | None:
+        found = self._payments(tenant_id, m.Payment.id == payment_id)
+        return found[0] if found else None
 
     def get_payments_for_submission(
         self, tenant_id: str, submission_id: str
