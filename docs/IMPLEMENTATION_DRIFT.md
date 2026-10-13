@@ -58,6 +58,17 @@ for a worker whose tax form was uploaded but never verified, and an approving re
 only defense. The gateway now re-runs the deterministic onboarding check at execution and
 refuses activation unless every required verification has passed.
 
+### Quality review wording disagreed with the check
+
+Quality review v5 and v6 section 4.1 says a review is overturned when it scored a criterion
+that did not apply, or when the applicable average passes. The check, its tests and
+`CHECKS.md` instead exclude inapplicable scores and overturn only when the applicable average
+passes. The two disagree when a reviewer scores an inapplicable criterion and the work still
+fails on the applicable ones. I chose the check's reading: a reviewer's mistake on something the
+task never asked for should not pass work that fails on what it did ask for. Policy versions are
+immutable, so the wording is fixed in quality review v7, effective 2026-10-15, and the loader
+now accepts closing an open version when its successor is published.
+
 ### Overturned quality reviews remain payout eligible
 
 Action Gateway review exposed an edge case where an overturned review could incorrectly suppress

@@ -41,6 +41,7 @@ def test_real_corpus_parses_with_stable_passage_ids() -> None:
         ("onboarding", 4),
         ("quality_review", 5),
         ("quality_review", 6),
+        ("quality_review", 7),
     }
     v12 = next(d for d in documents if d.front.version == 12)
     assert "payout_v12_section_4_3" in {p.passage_id for p in v12.passages}

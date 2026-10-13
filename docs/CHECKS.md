@@ -55,7 +55,10 @@ the United States).
 | Otherwise | `REVIEW_UPHELD` | 2.1, 3.1 |
 
 Applicable criteria are those the task instructions list. `n/a` marks and scores for criteria
-the instructions do not list are excluded.
+the instructions do not list are excluded. Scoring a criterion that does not apply is a
+reviewer error, but on its own it does not overturn a review that still fails on the applicable
+criteria. Quality review v5 and v6 worded section 4.1 so that it could be read the other way;
+v7 (from 2026-10-15) states this rule outright, and the check applies it under every version.
 
 ## What goes to the investigator
 

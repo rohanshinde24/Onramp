@@ -3,7 +3,7 @@
 # Each scenario names a deterministic world (backend/src/onramp/evaluation/worlds.py), the
 # subject the reporter names, and the reporter's words. The expected outcome lives in
 # truth.yaml, which the evaluation harness reads and the application never does.
-version: 2
+version: 3
 scenarios:
   - id: payout_settlement_failed
     case_type: payout
@@ -118,3 +118,15 @@ scenarios:
     world_fixture: quality_review_criteria_unspecified
     subject_id: qr_203
     report: Nobody told me what this task would be graded on.
+
+  - id: quality_review_inapplicable_scored_still_fails
+    case_type: quality_review
+    world_fixture: quality_review_inapplicable_scored_still_fails
+    subject_id: qr_204
+    report: The task only asked for accuracy, but I was marked down on formatting.
+
+  - id: quality_review_inapplicable_scored_still_fails_v7
+    case_type: quality_review
+    world_fixture: quality_review_inapplicable_scored_still_fails_v7
+    subject_id: qr_204
+    report: The task only asked for accuracy, but I was marked down on formatting.

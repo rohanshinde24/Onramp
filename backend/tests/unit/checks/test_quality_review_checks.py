@@ -13,6 +13,7 @@ from tests.unit.checks.support import days, policy
 
 AUG = datetime.fromisoformat("2026-08-10T12:00:00+00:00")  # quality v5
 SEPT = datetime.fromisoformat("2026-09-10T12:00:00+00:00")  # quality v6
+OCT = datetime.fromisoformat("2026-10-20T12:00:00+00:00")  # quality v7
 CRITERIA = ["accuracy", "formatting"]
 
 
@@ -71,10 +72,21 @@ def test_scoring_an_inapplicable_criterion_can_overturn() -> None:
     )
 
 
-def test_inapplicable_criterion_but_still_below_threshold_is_upheld() -> None:
-    outcome = check_quality_review(facts({"accuracy": 0.6, "formatting": 0.6, "timestamps": 0.0}))
+@pytest.mark.parametrize("version", [5, 6, 7])
+def test_inapplicable_criterion_but_still_below_threshold_is_upheld(version: int) -> None:
+    # A reviewer error on a criterion that does not apply never passes work that fails on the
+    # criteria that do. v7 states this outright; v5 and v6 worded section 4.1 ambiguously.
+    reviewed = {5: AUG, 6: SEPT, 7: OCT}[version]
+    outcome = check_quality_review(
+        facts(
+            {"accuracy": 0.6, "formatting": 0.6, "timestamps": 0.0},
+            reviewed_at=reviewed,
+            version=version,
+        )
+    )
 
     assert outcome.resolution_code is ResolutionCode.REVIEW_UPHELD
+    assert "INAPPLICABLE_CRITERION_SCORED" in outcome.reason_codes
 
 
 @pytest.mark.parametrize(

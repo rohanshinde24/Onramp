@@ -7,7 +7,7 @@ Gateway, and is graded from what the databases say happened.
 Run it with:
 
 ```sh
-make up && make case-eval         # 19 reference scenarios
+make up && make case-eval         # 21 reference scenarios
 make adversarial-eval             # 15 attacks against the same application path
 ```
 
@@ -28,12 +28,13 @@ Inputs and truth are versioned together and must have exactly the same scenario 
 validated against the policy corpus: every required citation must be a passage of the labelled
 policy version.
 
-Version 2 has 19 scenarios: 9 payout, 6 onboarding and 4 quality review. They cover the
+Version 3 has 21 scenarios: 9 payout, 6 onboarding and 6 quality review. They cover the
 deterministic fast path for every case type, a settlement wait that resumes at its deadline and
 one that ends early when the payment settles, an evidence wait that times out and one where the
 requested form arrives, escalation by policy and by approval limit, agent resolutions that the
 gateway executes, an agent escalation, and two cases where the older policy version gives a
-different answer than the newer one would.
+different answer than the newer one would, and a reviewer error on an inapplicable criterion
+under quality review v6 and v7.
 
 ## Worlds and isolation
 

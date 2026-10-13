@@ -23,6 +23,7 @@ def main() -> None:
         sys.exit(f"policy load failed: {exc}")
     print(f"loaded: {', '.join(result.loaded) or 'none'}")
     print(f"unchanged: {', '.join(result.unchanged) or 'none'}")
+    print(f"closed: {', '.join(result.closed) or 'none'}")
 
 
 if __name__ == "__main__":

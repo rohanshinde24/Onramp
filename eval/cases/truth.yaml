@@ -3,7 +3,7 @@
 #
 # required_citations is every policy passage the correct decision rests on. The policy is the
 # version in force at the case's incident time.
-version: 2
+version: 3
 truths:
   - id: payout_settlement_failed
     resolution_code: MISSING_PAYOUT
@@ -186,3 +186,25 @@ truths:
     policy_id: quality_review
     policy_version: 6
     note: The task lists no criteria; section 6.1 refers unclear criteria to a lead.
+
+  - id: quality_review_inapplicable_scored_still_fails
+    resolution_code: REVIEW_UPHELD
+    required_citations:
+      - quality_review_v6_section_2_1
+      - quality_review_v6_section_3_1
+      - quality_review_v6_section_5_1
+    policy_id: quality_review
+    policy_version: 6
+    note: >-
+      v6 section 4.1 reads as if any inapplicable score overturns. The decision recorded for this project is that it does not: formatting is excluded, accuracy 0.60 is below 0.75, and v7 states the rule outright.
+
+  - id: quality_review_inapplicable_scored_still_fails_v7
+    resolution_code: REVIEW_UPHELD
+    required_citations:
+      - quality_review_v7_section_2_1
+      - quality_review_v7_section_3_1
+      - quality_review_v7_section_5_1
+    policy_id: quality_review
+    policy_version: 7
+    note: >-
+      Under v7 the rule is explicit: the inapplicable score is excluded and accuracy 0.60 is below 0.75.

@@ -1,6 +1,13 @@
-"""Loading the corpus into the database. Loaded versions are immutable."""
+"""Loading the corpus into the database. Loaded versions are immutable.
 
-from dataclasses import dataclass
+The one change a loaded version accepts is being closed: an open version (no end date) may be
+given an end date when a newer version takes over, provided nothing else in its source changed
+and the end date is not in the past. Ending a version retroactively would change which rules
+governed incidents that were already decided.
+"""
+
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -17,11 +24,15 @@ class ImmutableVersionError(ValueError):
 class LoadResult:
     loaded: list[str]
     unchanged: list[str]
+    closed: list[str] = field(default_factory=list)
 
 
-def load_documents(session: Session, documents: list[PolicyDocument]) -> LoadResult:
-    loaded, unchanged = [], []
-    for doc in documents:
+def load_documents(
+    session: Session, documents: list[PolicyDocument], *, now: datetime | None = None
+) -> LoadResult:
+    loaded, unchanged, closed = [], [], []
+    # Older versions first, so a version is closed before its successor's period is added.
+    for doc in sorted(documents, key=lambda d: (d.front.policy_id, d.front.version)):
         front = doc.front
         label = f"{front.policy_id} v{front.version}"
         policy = session.get(Policy, front.policy_id)
@@ -35,9 +46,11 @@ def load_documents(session: Session, documents: list[PolicyDocument]) -> LoadRes
             select(PolicyVersion).filter_by(policy_id=front.policy_id, version=front.version)
         )
         if existing is not None:
-            if existing.source_sha256 != doc.sha256:
-                raise ImmutableVersionError(f"{label} changed after it was loaded")
-            unchanged.append(label)
+            if existing.source_sha256 == doc.sha256:
+                unchanged.append(label)
+            else:
+                _close(session, existing, doc, now or datetime.now(UTC), label)
+                closed.append(label)
             continue
 
         session.add(
@@ -64,4 +77,30 @@ def load_documents(session: Session, documents: list[PolicyDocument]) -> LoadRes
         )
         session.flush()
         loaded.append(label)
-    return LoadResult(loaded, unchanged)
+    return LoadResult(loaded, unchanged, closed)
+
+
+def _close(
+    session: Session, existing: PolicyVersion, doc: PolicyDocument, now: datetime, label: str
+) -> None:
+    front = doc.front
+    stored = {
+        (p.passage_id, p.section, p.heading, p.text)
+        for p in session.scalars(
+            select(PolicyPassage).filter_by(policy_id=front.policy_id, version=front.version)
+        )
+    }
+    only_closing = (
+        existing.effective_until is None
+        and front.effective_until is not None
+        and front.effective_from == existing.effective_from
+        and doc.parameters == existing.parameters
+        and {(p.passage_id, p.section, p.heading, p.text) for p in doc.passages} == stored
+    )
+    if not only_closing:
+        raise ImmutableVersionError(f"{label} changed after it was loaded")
+    if front.effective_until is not None and front.effective_until < now:
+        raise ImmutableVersionError(f"{label} cannot be ended in the past")
+    existing.effective_until = front.effective_until
+    existing.source_sha256 = doc.sha256
+    session.flush()

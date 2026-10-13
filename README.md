@@ -33,7 +33,7 @@ Phases 0 through 14 are complete. What works today:
   timers, duplicate-safe direct and Kafka fallback signals, and missed-start reconciliation
 * independently scalable workflow and agent workers; model credentials exist only in the
   opt-in agent worker role
-* whole-application case evaluation: 19 versioned scenarios in isolated synthetic worlds, run
+* whole-application case evaluation: 21 versioned scenarios in isolated synthetic worlds, run
   through the real services with scripted investigations, graded deterministically against
   separate truth, with safety invariants checked against the marketplace's own write log
 * adversarial evaluation: 15 attacks (prompt injection, namesakes, another tenant's records,

@@ -305,6 +305,8 @@ Operability
 * **Evidence:** a reference to a marketplace record or policy passage attached to a case,
   with its source.
 * **Policy version:** an immutable text of a policy with `effective_from` and `effective_until`.
+  The only change a loaded version accepts is being given an end date, not in the past, when a
+  newer version takes over.
 * **Passage:** a section of a policy version with a stable ID such as
   `payout_v12_section_4_3`.
 * **Proposal:** a resolution and optional action produced by the agent or an operator. Never

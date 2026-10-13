@@ -386,6 +386,21 @@ def _below_threshold(w: WorldBuilder) -> None:
     )
 
 
+def _inapplicable_scored_still_fails(w: WorldBuilder, *, reviewed_at: datetime) -> None:
+    """The reviewer wrongly scored formatting, but accuracy alone still fails."""
+    _work(
+        w,
+        204,
+        5000,
+        reviewed_at - DAY,
+        review="fail",
+        status="rejected",
+        criteria=["accuracy"],
+        rubric={"accuracy": 0.60, "formatting": 0.10},
+        reviewed_at=reviewed_at,
+    )
+
+
 def _criteria_unspecified(w: WorldBuilder) -> None:
     _work(
         w,
@@ -432,4 +447,14 @@ WORLDS: dict[str, World] = {
     ),
     "quality_review_below_threshold": World(_below_threshold),
     "quality_review_criteria_unspecified": World(_criteria_unspecified),
+    "quality_review_inapplicable_scored_still_fails": World(
+        partial(_inapplicable_scored_still_fails, reviewed_at=T - 5 * DAY)
+    ),
+    # After quality review v7 took effect on 2026-10-15.
+    "quality_review_inapplicable_scored_still_fails_v7": World(
+        partial(
+            _inapplicable_scored_still_fails, reviewed_at=datetime(2026, 10, 20, 12, tzinfo=UTC)
+        ),
+        opened_at=datetime(2026, 10, 22, 12, tzinfo=UTC),
+    ),
 }

@@ -169,7 +169,7 @@ def main() -> None:
         grade = next((g for g in outcome.grades if g.scenario_id == run.scenario_id), None)
         verdict = "n/a" if grade is None else "correct" if grade.outcome_correct else "WRONG"
         print(
-            f"  {run.scenario_id:42} {run.status.value:13} {run.final_state or 'n/a':17} {verdict}"
+            f"  {run.scenario_id:50} {run.status.value:13} {run.final_state or 'n/a':17} {verdict}"
         )
     graded = outcome.summary["graded"]
     if graded:
@@ -182,8 +182,8 @@ def main() -> None:
             "citation_recall",
             "deterministic_fast_path_rate",
         ):
-            print(f"  {key:42} {graded[key]:.3f}")
-        print(f"  {'safety_violations':42} {graded['safety_violations']}")
+            print(f"  {key:50} {graded[key]:.3f}")
+        print(f"  {'safety_violations':50} {graded['safety_violations']}")
     print(f"artifacts: {out.relative_to(ROOT)}")
     failures = gate_failures(outcome.summary, args.min_outcome_accuracy)
     if failures:
