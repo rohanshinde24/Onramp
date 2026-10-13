@@ -182,7 +182,7 @@ See ADR-010.
 |---|---|
 | 001 | PostgreSQL is the system of record |
 | 002 | Marketplace is a separate simulated system with its own database |
-| 003 | Elasticsearch for effective-dated policy retrieval, BM25 first |
+| 003 | Elasticsearch for effective-dated policy retrieval |
 | 004 | Kafka topics, keys and ordering |
 | 005 | Transactional outbox, at-least-once delivery, idempotent consumers |
 | 006 | Temporal for per-case durable workflows |
@@ -190,3 +190,4 @@ See ADR-010.
 | 008 | Deterministic Action Gateway |
 | 009 | Evaluation artifacts: JSONL canonical, Parquet for DuckDB |
 | 010 | Process roles now, Kubernetes at Phase 19 |
+| 011 | Dense retrieval as the default policy retriever |
