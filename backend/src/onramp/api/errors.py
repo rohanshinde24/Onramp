@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm.exc import StaleDataError
 
 from onramp.api.cases import InvalidCursorError
+from onramp.api.policies import PassageNotFoundError
 from onramp.approvals.service import (
     AlreadyDecidedError,
     ContentMismatchError,
@@ -22,6 +23,7 @@ from onramp.cases.service import (
 )
 from onramp.cases.state import IllegalTransitionError
 from onramp.identity.principal import PermissionDeniedError
+from onramp.policy.applicability import NoApplicablePolicyError
 from onramp.proposals.service import (
     InvalidProposalError,
     ProposalNotFoundError,
@@ -38,6 +40,8 @@ _STATUS: dict[type[Exception], tuple[int, str]] = {
     StaleCaseError: (status.HTTP_409_CONFLICT, "stale_case"),
     StaleDataError: (status.HTTP_409_CONFLICT, "stale_case"),
     InvalidCursorError: (status.HTTP_422_UNPROCESSABLE_CONTENT, "invalid_cursor"),
+    PassageNotFoundError: (status.HTTP_404_NOT_FOUND, "passage_not_found"),
+    NoApplicablePolicyError: (status.HTTP_409_CONFLICT, "no_applicable_policy"),
     InvalidProposalError: (status.HTTP_422_UNPROCESSABLE_CONTENT, "invalid_proposal"),
     ProposalNotFoundError: (status.HTTP_404_NOT_FOUND, "proposal_not_found"),
     ProposalNotPendingError: (status.HTTP_409_CONFLICT, "proposal_not_pending"),
