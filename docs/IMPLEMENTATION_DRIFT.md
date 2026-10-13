@@ -50,6 +50,14 @@ agent activity now fails on `model_error`, and the workflow retries it with capp
 backoff and no attempt limit. The case still waits in `INVESTIGATING` until the provider answers
 or a person acts.
 
+### Activation must recheck onboarding requirements
+
+Planning the Phase 14 adversarial scenarios showed that the gateway checked only that a worker
+was still pending before activating them. A compromised investigator could propose activation
+for a worker whose tax form was uploaded but never verified, and an approving reviewer was the
+only defense. The gateway now re-runs the deterministic onboarding check at execution and
+refuses activation unless every required verification has passed.
+
 ### Overturned quality reviews remain payout eligible
 
 Action Gateway review exposed an edge case where an overturned review could incorrectly suppress

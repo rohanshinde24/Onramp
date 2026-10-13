@@ -500,6 +500,35 @@ def test_nonfinancial_actions_execute_through_the_same_gateway(
         assert review.overturned_at is not None
 
 
+def test_activation_rechecks_onboarding_requirements_at_execution(sessions: Sessions) -> None:
+    onramp, marketplace = sessions
+    with marketplace() as session, session.begin():
+        session.add(
+            marketplace_models.VerificationRecord(
+                id="acme_v_610c",
+                tenant_id="acme",
+                worker_id="acme_w_610",
+                kind="tax_form",
+                status="passed",
+                completed_at=NOW - timedelta(days=1),
+            )
+        )
+    case_id, proposal_id = _approved_case(sessions, "acme_w_610")
+    with marketplace() as session, session.begin():
+        session.get_one(marketplace_models.VerificationRecord, "acme_v_610c").status = "expired"
+
+    with pytest.raises(GatewayRejectedError) as rejected:
+        _gateway(sessions).execute("acme", proposal_id)
+
+    assert rejected.value.code == "onboarding_requirements_not_met"
+    worker = SqlMarketplaceReader(marketplace).get_worker("acme", "acme_w_610")
+    assert worker is not None
+    assert worker.status == "pending_onboarding"
+    with onramp() as session:
+        case = session.get_one(SupportCase, case_id)
+        assert (case.state, case.escalation_reason) == (CaseState.ESCALATED, "invalid_proposal")
+
+
 def test_concurrent_execution_produces_one_business_mutation(
     onramp_committed: sessionmaker[Session], marketplace_committed: sessionmaker[Session]
 ) -> None:

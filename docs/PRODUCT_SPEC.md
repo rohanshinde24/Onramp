@@ -218,7 +218,8 @@ side effect:
 4. The caller is authorized for this action, and the approver is a different eligible person
    when approval is required.
 5. Policy constraints hold: amount equals the server-computed amount owed, amount is within the
-   limit, the action matches the resolution.
+   limit, the action matches the resolution, and a worker is activated only when the
+   deterministic onboarding check finds every required verification passed at execution time.
 6. Every evidence reference resolves to a real record or passage attached to this case.
 7. Approval exists when the risk class requires it, and is bound to this exact proposal.
 8. The action has an idempotency key, and a repeat of the same action is a no-op returning

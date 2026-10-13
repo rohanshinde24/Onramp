@@ -17,8 +17,9 @@ from onramp.cases.models import CaseType, SupportCase
 from onramp.cases.resolutions import ACTION_RISK, ActionType, ResolutionCode, required_action
 from onramp.cases.service import transition
 from onramp.cases.state import CaseState
+from onramp.checks.outcome import OutcomeKind
 from onramp.checks.policy_context import PolicyContext, PolicyGapError
-from onramp.checks.runner import policy_context
+from onramp.checks.runner import MissingRecordError, policy_context, run_checks
 from onramp.db.types import new_id
 from onramp.events.contracts import ActionExecutedV1, ActionFailedV1
 from onramp.events.outbox import emit
@@ -321,10 +322,11 @@ class ActionGateway:
             worker = self._marketplace.get_worker(case.tenant_id, case.worker_id)
             if worker is None:
                 raise GatewayRejectedError("worker_not_found")
-            if worker.status != "pending_onboarding" and not (
-                resuming and worker.status == "active"
-            ):
+            activated_by_this_action = resuming and worker.status == "active"
+            if worker.status != "pending_onboarding" and not activated_by_this_action:
                 raise GatewayRejectedError("worker_not_activatable", worker.status)
+            if not activated_by_this_action:
+                self._require_onboarding_complete(session, case)
             request = {"worker_id": worker.id}
         else:
             review = self._marketplace.get_quality_review(case.tenant_id, case.subject_id)
@@ -344,6 +346,24 @@ class ActionGateway:
         if proposed != derived_params:
             raise GatewayRejectedError("action_params_mismatch")
         return request
+
+    def _require_onboarding_complete(self, session: Session, case: SupportCase) -> None:
+        """Activation needs every verification the policy in force requires, passed now.
+
+        The proposal's resolution is not evidence of that: a model can be talked into it and a
+        reviewer can miss it. The deterministic onboarding check decides.
+        """
+        try:
+            outcome = run_checks(session, case, self._marketplace, self._clock())
+        except MissingRecordError as exc:
+            raise GatewayRejectedError("worker_not_found", str(exc)) from exc
+        if (outcome.kind, outcome.resolution_code) != (
+            OutcomeKind.RESOLVE,
+            ResolutionCode.REQUIREMENTS_MET,
+        ):
+            raise GatewayRejectedError(
+                "onboarding_requirements_not_met", ", ".join(outcome.reason_codes)
+            )
 
     def _reachable_refs(self, case: SupportCase) -> set[str]:
         tenant = case.tenant_id
