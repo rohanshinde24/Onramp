@@ -4,6 +4,17 @@ Every number here comes from a command in this repository. Each entry names the 
 dataset version, the commit, and the run ID whose artifacts produced it. Artifacts are
 written to `artifacts/` and are not committed; rerun the command to reproduce.
 
+## Case evaluation
+
+Phase 13 foundations are present: versioned visible scenario inputs, separately loaded truth,
+deterministic graders, deliberately bad-output tests, and an adapter from stored application
+records to evaluation observations. The whole-application runner, committed scenario dataset,
+artifact writer, and one-command entrypoint are not built yet.
+
+No case-evaluation result is published here. A future result must include its command, scenario
+version, commit, run ID, dirty-tree state, artifacts, and limitations before it can support a
+benchmark or resume claim.
+
 ## Policy retrieval
 
 Command: `make up && make migrate && make retrieval-eval` (with `pip install -e 'backend[embeddings]'`).

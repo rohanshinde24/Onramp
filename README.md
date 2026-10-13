@@ -10,7 +10,8 @@ approver.
 
 ## Status
 
-Phases 0 through 12 are complete. What works today:
+Phases 0 through 12 are complete. Phase 13 evaluation foundations are in progress. What works
+today:
 
 * tenants, users and roles, with bearer-token authentication whose role is always read from
   the database
@@ -33,9 +34,12 @@ Phases 0 through 12 are complete. What works today:
   timers, duplicate-safe direct and Kafka fallback signals, and missed-start reconciliation
 * independently scalable workflow and agent workers; model credentials exist only in the
   opt-in agent worker role
+* a versioned case-scenario and separate truth schema, deterministic case graders, and an
+  adapter that derives evaluation observations from authoritative stored records
 
-Not built yet: the evaluation and adversarial testing platform, the real operator console, full
-observability, Kubernetes packaging, final scale benchmarks, and AWS staging. No live model call
+Not built yet: the whole-application evaluation runner and committed case dataset, adversarial
+testing, the real operator console, full observability, Kubernetes packaging, final scale
+benchmarks, and AWS staging. No case-evaluation result has been published and no live model call
 has been made.
 
 ## Documents
@@ -43,6 +47,7 @@ has been made.
 * [Product specification](docs/PRODUCT_SPEC.md)
 * [Architecture](docs/ARCHITECTURE.md)
 * [Architecture decision records](docs/adr/README.md)
+* [Implementation drift and follow-ups](docs/IMPLEMENTATION_DRIFT.md)
 
 ## Running locally
 
