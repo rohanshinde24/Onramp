@@ -36,7 +36,7 @@ from onramp.marketplace.reader import SqlMarketplaceReader
 from tests.integration.api_support import move_case
 
 pytestmark = pytest.mark.kafka
-BOOTSTRAP = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+BOOTSTRAP = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "127.0.0.1:9092")
 
 
 def _run_consumer(

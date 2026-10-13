@@ -8,7 +8,7 @@ from confluent_kafka import Consumer, Message
 
 from onramp.events.kafka import ensure_topics
 
-BOOTSTRAP = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+BOOTSTRAP = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "127.0.0.1:9092")
 
 
 @pytest.fixture(scope="session")
