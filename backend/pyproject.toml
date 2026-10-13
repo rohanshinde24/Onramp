@@ -14,10 +14,13 @@ dependencies = [
     "pydantic-settings>=2.15,<3",
 ]
 
+[project.scripts]
+onramp-api = "onramp.entrypoints.api:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=9.1,<10",
-    "httpx>=0.28,<0.29",
+    "httpx2>=2.13,<3",
     "ruff>=0.17,<0.18",
     "mypy>=2.4,<3",
     "import-linter>=2.15,<3",
@@ -29,6 +32,7 @@ packages = ["src/onramp"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
+filterwarnings = ["error"]
 markers = [
     "integration: needs PostgreSQL or another service from docker compose",
 ]
