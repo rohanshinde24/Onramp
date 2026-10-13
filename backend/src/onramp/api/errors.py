@@ -48,13 +48,20 @@ _STATUS: dict[type[Exception], tuple[int, str]] = {
 }
 
 
+# Library exceptions whose messages describe internals; clients get only the error code.
+_NO_DETAIL: frozenset[type[Exception]] = frozenset({StaleDataError})
+
+
 def install_error_handlers(app: FastAPI) -> None:
     for exc_type, (code, error) in _STATUS.items():
-        app.add_exception_handler(exc_type, _handler(code, error))
+        app.add_exception_handler(exc_type, _handler(code, error, exc_type not in _NO_DETAIL))
 
 
-def _handler(code: int, error: str) -> Callable[[Request, Exception], Awaitable[JSONResponse]]:
+def _handler(
+    code: int, error: str, with_detail: bool
+) -> Callable[[Request, Exception], Awaitable[JSONResponse]]:
     async def handle(_: Request, exc: Exception) -> JSONResponse:
-        return JSONResponse(status_code=code, content={"error": error, "detail": str(exc)})
+        detail = str(exc) if with_detail else None
+        return JSONResponse(status_code=code, content={"error": error, "detail": detail})
 
     return handle

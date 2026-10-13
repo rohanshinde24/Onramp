@@ -4,6 +4,7 @@ Intake trusts nothing about identity from the request. The worker, and the time 
 the applicable policy, come from marketplace records.
 """
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -23,8 +24,10 @@ from onramp.db.types import new_id
 from onramp.identity.principal import Principal
 from onramp.identity.roles import Permission, Role
 from onramp.marketplace.reader import MarketplaceReader
+from onramp.telemetry.logging import log_context
 
 Clock = Callable[[], datetime]
+log = logging.getLogger(__name__)
 
 
 def _utcnow() -> datetime:
@@ -294,3 +297,6 @@ def transition(
         causation_id=causation_id,
     )
     session.flush()
+    # Staged in the caller's transaction; the audit row is the record of whether it committed.
+    with log_context(case_id=case.id, tenant_id=case.tenant_id):
+        log.info("case transition staged %s -> %s reason=%s", current.value, target.value, reason)

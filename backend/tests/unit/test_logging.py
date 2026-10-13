@@ -59,3 +59,22 @@ def test_unsafe_caller_request_id_is_replaced() -> None:
     response = TestClient(create_app()).get("/healthz", headers={"X-Request-ID": 'x" injected="1'})
 
     assert response.headers["X-Request-ID"] != 'x" injected="1'
+
+
+def test_error_responses_hide_library_internals() -> None:
+    from fastapi import FastAPI
+    from sqlalchemy.orm.exc import StaleDataError
+
+    from onramp.api.errors import install_error_handlers
+
+    app = FastAPI()
+    install_error_handlers(app)
+
+    @app.get("/boom")
+    def boom() -> None:
+        raise StaleDataError("UPDATE statement on table 'support_case' matched 0 rows")
+
+    response = TestClient(app).get("/boom")
+
+    assert response.status_code == 409
+    assert response.json() == {"error": "stale_case", "detail": None}
