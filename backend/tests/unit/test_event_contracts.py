@@ -7,6 +7,8 @@ from pydantic import ValidationError
 
 from onramp.events.contracts import (
     CONTRACTS,
+    ActionExecutedV1,
+    ActionFailedV1,
     CaseCreatedV1,
     InvalidEventPayloadError,
     UnsupportedEventError,
@@ -118,6 +120,38 @@ def test_added_optional_payload_field_stays_compatible() -> None:
 def test_every_contract_routes_to_a_known_topic() -> None:
     assert {c.topic for c in CONTRACTS.values()} <= {t.name for t in DOMAIN_TOPICS}
     assert latest_contract("approval.granted").schema_version == 1
+
+
+@pytest.mark.parametrize(
+    ("event_type", "payload"),
+    [
+        (
+            "action.executed",
+            ActionExecutedV1(
+                action_id="act_1",
+                proposal_id="prop_1",
+                approval_id="appr_1",
+                action_type="PAYOUT_ADJUSTMENT",
+                result={"payment_id": "pay_1"},
+            ),
+        ),
+        (
+            "action.failed",
+            ActionFailedV1(
+                action_id="act_1",
+                proposal_id="prop_1",
+                approval_id="appr_1",
+                action_type="PAYOUT_ADJUSTMENT",
+                status="unverified",
+                reason_code="postcondition_failed",
+            ),
+        ),
+    ],
+)
+def test_action_payloads_parse_through_their_contract(event_type: str, payload: Any) -> None:
+    parsed = parse_payload(_envelope(event_type=event_type, payload=serialize_payload(payload)))
+
+    assert parsed == payload
 
 
 def test_ordering_helper() -> None:

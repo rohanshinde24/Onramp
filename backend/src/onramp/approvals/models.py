@@ -27,6 +27,7 @@ class Approval(OnrampBase):
 
     __tablename__ = "approval"
     __table_args__ = (
+        UniqueConstraint("tenant_id", "id", name="uq_approval_tenant_id_id"),
         UniqueConstraint("tenant_id", "proposal_id"),
         ForeignKeyConstraint(["tenant_id", "proposal_id"], ["proposal.tenant_id", "proposal.id"]),
         ForeignKeyConstraint(["tenant_id", "approver_id"], ["app_user.tenant_id", "app_user.id"]),

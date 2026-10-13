@@ -1,5 +1,6 @@
 """Import point for every onramp-database model, used by Alembic autogenerate."""
 
+from onramp.actions.models import ExecutedAction
 from onramp.agent.models import InvestigationRun
 from onramp.approvals.models import Approval
 from onramp.audit.models import AuditEvent
@@ -15,6 +16,7 @@ __all__ = [
     "Approval",
     "AuditEvent",
     "CheckRun",
+    "ExecutedAction",
     "InvestigationRun",
     "OutboxEvent",
     "Policy",
