@@ -26,8 +26,26 @@ without a test is a plan, not a property.
 | Concurrent marketplace writes with one key | Exactly one write | `test_marketplace_writer.py::test_concurrent_calls_with_one_key_write_once` |
 | Process receives SIGTERM | API drains requests; publisher finishes its cycle before exit | `test_outbox_publisher.py::test_run_until_stopped_exits_when_signalled`; API checked manually in compose (exit 0) |
 
+| Consumer sees an event twice | Second delivery skipped; effect applied once | `test_consumer_runner.py::test_duplicate_delivery_applies_once` |
+| Consumer dies after DB commit, before offset commit | Redelivered and skipped | `test_consumer_runner.py::test_crash_after_db_commit_before_offset_commit` |
+| Unsupported event version or malformed envelope | Parked once, never guessed at | `test_consumer_runner.py::test_unsupported_version_is_parked_once`, `test_malformed_message_is_parked` |
+| Handler keeps failing | Retried, then parked with the error; no partial effect | `test_consumer_runner.py::test_persistent_handler_failure_is_parked_without_effect` |
+| Parked event after the fix | Replayed and applied once | `test_dlq_replay.py::test_replayed_event_is_applied_by_the_fixed_consumer` |
+| Republished event, consumer restart, full replay by a new group (real Kafka) | Case resumes exactly once | `test_evidence_over_kafka.py` |
+| Broker unreachable | Publish fails within the bounded timeout; backlog holds; publishes after recovery | `test_outbox_to_kafka.py::test_events_survive_a_broker_outage_and_publish_after_recovery` |
+
+## Incidents found by running the system
+
+* **2026-10-13, event consumer could not write.** The consumer process imported only the
+  models its handler used, so a foreign key to `tenant` could not be resolved and the first
+  evidence event was parked. Tests had imported every model up front and hidden it. Fixed in
+  `ae2d0a0`, with a test that resolves every foreign key from each entrypoint in a clean
+  interpreter. The parked event was replayed with `onramp-dlq-replay` and applied.
+* **2026-10-13, intermittent Kafka delivery timeouts in tests.** `localhost` resolved to `::1`
+  first, which the broker does not listen on. Fixed by advertising and connecting on
+  `127.0.0.1` (`cde2e77`).
+
 ## Not yet handled
 
-* Consumer deduplication and parking (Phase 7).
 * Workflow recovery and duplicate signals (Phase 12).
 * Retention of published outbox rows and marketplace idempotency records.

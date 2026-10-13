@@ -51,3 +51,40 @@ it would a third party's events.
 * Order holds only within one aggregate. Consumers that care compare `aggregate_version` to
   the last version they applied and ignore older or equal versions.
 * Events are notifications. A consumer that needs current state reads it from the owner.
+
+## Consumer groups
+
+| Group | Topics | Handles | Effect |
+|---|---|---|---|
+| `onramp-case-evidence` | `marketplace.workers`, `marketplace.payments` | `evidence.uploaded` v1, `payment.settled` v1, `payment.settlement_failed` v1 | Records the evidence on the open case it concerns and resumes the case if it was waiting for that kind of evidence |
+
+Every consumer runs on `ConsumerRunner`:
+
+1. Parse the envelope; malformed messages are parked.
+2. Event types the group does not handle are acknowledged and ignored. A handled type in an
+   unsupported version is parked.
+3. Insert `(consumer_group, event_id)` into `processed_event` and apply the effect in one
+   transaction. An existing row means the event was already handled; it is skipped.
+4. Commit the offset only after the database commit.
+
+## Parking and replay
+
+A handler that keeps failing is retried three times and then parked to `<topic>.dlq` with
+`dlq.reason`, `dlq.error`, `dlq.consumer_group` and `dlq.source` headers, and recorded as
+`parked`, so one bad event cannot block a partition.
+
+After fixing the cause:
+
+```sh
+make dlq-replay TOPIC=marketplace.workers GROUP=onramp-case-evidence
+```
+
+Replay removes that group's `parked` record and republishes the original message to the source
+topic. Other groups have already processed the event and skip it as a duplicate.
+
+## Replaying a whole topic
+
+A new consumer group starting from the earliest offset sees every retained event again. Its
+effects must stay correct: handlers re-read current state and act only when the state calls
+for it, so replaying old evidence into a case that has moved on records history but does not
+move the case backwards.
