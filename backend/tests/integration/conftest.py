@@ -10,7 +10,7 @@ from collections.abc import Iterator
 import pytest
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.engine import make_url
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from onramp.config import get_settings
 from onramp.db import migrate
@@ -68,12 +68,18 @@ def marketplace_engine(marketplace_db_url: str) -> Iterator[Engine]:
 
 
 @pytest.fixture
-def marketplace_session(marketplace_engine: Engine) -> Iterator[Session]:
+def marketplace_sessions(marketplace_engine: Engine) -> Iterator[sessionmaker[Session]]:
+    """Session factory whose sessions all share one connection that is rolled back after the
+    test, so code that opens its own sessions still sees the test's rows."""
     with marketplace_engine.connect() as connection:
         outer = connection.begin()
-        session = Session(bind=connection, join_transaction_mode="create_savepoint")
         try:
-            yield session
+            yield sessionmaker(bind=connection, join_transaction_mode="create_savepoint")
         finally:
-            session.close()
             outer.rollback()
+
+
+@pytest.fixture
+def marketplace_session(marketplace_sessions: sessionmaker[Session]) -> Iterator[Session]:
+    with marketplace_sessions() as session:
+        yield session
