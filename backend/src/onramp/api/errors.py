@@ -22,6 +22,7 @@ from onramp.cases.service import (
     WorkerMismatchError,
 )
 from onramp.cases.state import IllegalTransitionError
+from onramp.checks.service import ChecksNotApplicableError
 from onramp.identity.principal import PermissionDeniedError
 from onramp.policy.applicability import NoApplicablePolicyError
 from onramp.proposals.service import (
@@ -41,6 +42,7 @@ _STATUS: dict[type[Exception], tuple[int, str]] = {
     StaleDataError: (status.HTTP_409_CONFLICT, "stale_case"),
     InvalidCursorError: (status.HTTP_422_UNPROCESSABLE_CONTENT, "invalid_cursor"),
     PassageNotFoundError: (status.HTTP_404_NOT_FOUND, "passage_not_found"),
+    ChecksNotApplicableError: (status.HTTP_409_CONFLICT, "checks_not_applicable"),
     NoApplicablePolicyError: (status.HTTP_409_CONFLICT, "no_applicable_policy"),
     InvalidProposalError: (status.HTTP_422_UNPROCESSABLE_CONTENT, "invalid_proposal"),
     ProposalNotFoundError: (status.HTTP_404_NOT_FOUND, "proposal_not_found"),

@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from onramp.approvals.service import ApprovalService
 from onramp.cases.service import CaseService
+from onramp.checks.service import CheckService
 from onramp.proposals.service import ProposalService
 
 
@@ -23,3 +24,4 @@ class AppServices:
     cases: CaseService
     proposals: ProposalService
     approvals: ApprovalService
+    checks: CheckService

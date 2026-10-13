@@ -7,14 +7,17 @@ within the graceful timeout.
 import uvicorn
 
 import onramp.models  # noqa: F401 - every table must be mapped before any session is used
+from onramp.actions.evidence import EvidenceRequester
 from onramp.api.app import create_app
 from onramp.api.services import AppServices, AuthConfig
 from onramp.approvals.service import ApprovalService
 from onramp.cases.service import CaseService
+from onramp.checks.service import CheckService
 from onramp.config import get_settings
 from onramp.db.engine import make_engine, make_session_factory
 from onramp.db.readiness import database_check
 from onramp.marketplace.reader import SqlMarketplaceReader
+from onramp.marketplace.writer import SqlMarketplaceWriter
 from onramp.proposals.service import ProposalService
 from onramp.telemetry.logging import configure_logging
 from onramp.telemetry.tracing import configure_tracing
@@ -27,6 +30,8 @@ def main() -> None:
     engine = make_engine(str(settings.database_url))
     marketplace_engine = make_engine(str(settings.marketplace_database_url))
     sessions = make_session_factory(engine)
+    marketplace_sessions = make_session_factory(marketplace_engine)
+    marketplace_reader = SqlMarketplaceReader(marketplace_sessions)
     services = AppServices(
         sessions=sessions,
         auth=AuthConfig(
@@ -34,9 +39,14 @@ def main() -> None:
             issuer=settings.auth_issuer,
             audience=settings.auth_audience,
         ),
-        cases=CaseService(sessions, SqlMarketplaceReader(make_session_factory(marketplace_engine))),
+        cases=CaseService(sessions, marketplace_reader),
         proposals=ProposalService(sessions),
         approvals=ApprovalService(sessions),
+        checks=CheckService(
+            sessions,
+            marketplace_reader,
+            EvidenceRequester(SqlMarketplaceWriter(marketplace_sessions)),
+        ),
     )
     app = create_app(
         services,

@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session, sessionmaker
 
+from onramp.actions.evidence import EvidenceRequester
 from onramp.api.app import create_app
 from onramp.api.services import AppServices, AuthConfig
 from onramp.approvals.service import ApprovalService
@@ -13,10 +14,12 @@ from onramp.audit.service import Actor
 from onramp.cases.models import SupportCase
 from onramp.cases.service import CaseService, transition
 from onramp.cases.state import CaseState
+from onramp.checks.service import CheckService
 from onramp.identity.models import Tenant, User
 from onramp.identity.tokens import issue_token
 from onramp.marketplace.builder import WorldBuilder
 from onramp.marketplace.reader import SqlMarketplaceReader
+from onramp.marketplace.writer import SqlMarketplaceWriter
 from onramp.proposals.service import ProposalService
 
 AUTH = AuthConfig("integration-signing-key-0123456789abcdef", "onramp", "onramp-api")
@@ -86,6 +89,12 @@ def build_client(
         cases=CaseService(onramp_sessions, reader, now),
         proposals=ProposalService(onramp_sessions, now),
         approvals=ApprovalService(onramp_sessions, now),
+        checks=CheckService(
+            onramp_sessions,
+            reader,
+            EvidenceRequester(SqlMarketplaceWriter(marketplace_sessions, clock=now)),
+            now,
+        ),
     )
     return TestClient(create_app(services))
 
