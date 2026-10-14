@@ -6,8 +6,8 @@ written to `artifacts/` and are not committed; rerun the command to reproduce.
 
 ## Case evaluation
 
-Commands: `make up && make case-eval` and `make adversarial-eval`. Design and grading rules:
-[EVALUATION.md](EVALUATION.md).
+Commands: `make up && make case-eval`, `make adversarial-eval` and `make fault-eval`. Design and
+grading rules: [EVALUATION.md](EVALUATION.md).
 
 Reference suite: `eval/cases/` version 3, 21 scenarios (9 payout, 6 onboarding, 6 quality
 review), investigations `scripted:reference:v2`, prompt `investigator-v1`, honest reviewer.
@@ -15,19 +15,22 @@ review), investigations `scripted:reference:v2`, prompt `investigator-v1`, hones
 Adversarial suite: `eval/adversarial/` version 1, 15 attacks, investigations
 `scripted:compromised:v1`, reviewers per `eval/adversarial/reviewers.yaml`.
 
-Runs `20261013T225750Z` (reference) and `20261013T225754Z` (adversarial), commit `d121b57`,
-clean tree:
+Fault suite: `eval/faults/` version 1, 15 scenarios with faults per `eval/faults/faults.yaml`,
+investigations `scripted:reference:v1`.
 
-| Measure | Reference | Adversarial |
-|---|---|---|
-| Runs: success / app failure / harness error | 21 / 0 / 0 | 15 / 0 / 0 |
-| Outcome correct (for attacks, the safe outcome) | 21 of 21 | 15 of 15 |
-| Resolution macro F1, averaged over case types | 1.000 | 1.000 |
-| Escalation precision / recall | 1.000 / 1.000 | 1.000 / 1.000 |
-| Citation precision / recall | 1.000 / 1.000 | 1.000 / 1.000 |
-| Fabricated citations | 0 | 0 |
-| Safety violations | 0 | 0 |
-| Cases settled without the model | 18 of 21 | 7 of 15 |
+Runs `20261014T004935Z` (reference), `20261014T004939Z` (adversarial) and `20261014T004943Z`
+(faults), commit `09dd8a5`, clean tree:
+
+| Measure | Reference | Adversarial | Faults |
+|---|---|---|---|
+| Runs: success / app failure / injected fault / harness error | 21 / 0 / 0 / 0 | 15 / 0 / 0 / 0 | 15 / 0 / 0 / 0 |
+| Outcome correct (for attacks, the safe outcome) | 21 of 21 | 15 of 15 | 15 of 15 |
+| Resolution macro F1, averaged over case types | 1.000 | 1.000 | 1.000 |
+| Escalation precision / recall | 1.000 / 1.000 | 1.000 / 1.000 | 1.000 / 1.000 |
+| Citation precision / recall | 1.000 / 1.000 | 1.000 / 1.000 | 1.000 / 1.000 |
+| Fabricated citations | 0 | 0 | 0 |
+| Safety violations | 0 | 0 | 0 |
+| Cases settled without the model | 18 of 21 | 7 of 15 | 11 of 15 |
 
 What this shows:
 
@@ -38,12 +41,15 @@ What this shows:
   marketplace write it should not, and each was stopped by the layer named in EVALUATION.md.
 * Seeded bad variants (wrong amount, wrong resolution, forged citation, a writer that pays twice,
   the activation recheck removed) fail in tests, so a perfect score is not the grader's default.
+* With lost and timed-out marketplace responses, model and search outages, crashes after
+  commit and duplicate events, every case recovered to its normal outcome with no extra write.
 
 Limits:
 
 * Investigations are scripted. This measures the application around the model, not any
   model's judgment, and its token and latency numbers mean nothing.
-* Reviewers are scripted. Waits end on a virtual clock, not Temporal timers. Search uses a
+* Reviewers are scripted. Waits and retries run on a virtual clock that mirrors Temporal's
+  policies, not on Temporal itself. Search uses a
   keyword retriever, not the production dense one.
 * I wrote the worlds, labels, scripts and attacks. These are regression checks of specified
   behavior, not benchmarks, and the scores are expected to be perfect.

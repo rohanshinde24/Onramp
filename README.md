@@ -10,7 +10,7 @@ approver.
 
 ## Status
 
-Phases 0 through 14 are complete. What works today:
+Phases 0 through 15 are complete. What works today:
 
 * tenants, users and roles, with bearer-token authentication whose role is always read from
   the database
@@ -39,8 +39,10 @@ Phases 0 through 14 are complete. What works today:
 * adversarial evaluation: 15 attacks (prompt injection, namesakes, another tenant's records,
   stale policy, malformed and catalogue-violating conclusions, approval and replay attacks),
   each run against a scripted investigator or reviewer that goes along with it
+* fault-injection evaluation: 15 cases recovered through lost and timed-out marketplace
+  responses, model and search outages, crashes after commit, and duplicate or late events
 
-Not built yet: fault-injection campaigns, model and prompt regression with
+Not built yet: model and prompt regression with
 real models, the real operator console, full observability, Kubernetes packaging, final scale
 benchmarks, and AWS staging. No live model call has been made; the published case-evaluation
 run uses scripted investigations and measures the application, not a model.
@@ -67,6 +69,7 @@ make check            # lint, import boundaries, type check, unit tests
 make test-integration # tests against PostgreSQL
 make case-eval        # whole-application case evaluation, artifacts in artifacts/case-eval/
 make adversarial-eval # the same runner against attacks
+make fault-eval       # the same runner with injected faults
 ```
 
 Call the API as a seeded user:

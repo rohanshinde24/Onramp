@@ -46,6 +46,26 @@ without a test is a plan, not a property.
 | Republished event, consumer restart, full replay by a new group (real Kafka) | Case resumes exactly once | `test_evidence_over_kafka.py` |
 | Broker unreachable | Publish fails within the bounded timeout; backlog holds; publishes after recovery | `test_outbox_to_kafka.py::test_events_survive_a_broker_outage_and_publish_after_recovery` |
 
+## Whole-case recovery under injected faults
+
+`make fault-eval` runs whole cases through the real services while something goes wrong, with
+activity retries that mirror the workflow's retry policies. Each row is one scenario in
+`eval/faults/`, checked by `test_fault_evaluation.py::test_every_fault_is_recovered_to_the_normal_outcome_with_one_write` unless another test is named.
+
+| Fault during a case | Behavior |
+|---|---|
+| Payout response lost once | Gateway retries with the same key; one payment |
+| Payout response lost on every gateway attempt | Activity fails, is retried, resumes the stored action with the same key; one payment |
+| Activation times out before reaching the marketplace, three times | Retried activity activates once |
+| Review overturn lands but every response is lost | Retried activity verifies the existing overturn; one write |
+| Evidence request response lost | Checks rerun and repeat the request under the same key; one request |
+| Model provider fails twice | Investigation retried with backoff, then concludes |
+| Policy search fails twice mid-investigation | Investigation retried from the start, then concludes |
+| Process dies right after checks, an investigation, an execution, a settlement resume or an evidence timeout commits | The retry re-reads PostgreSQL, finds the work done and does not repeat it (one check run, one investigation, one payment) |
+| Marketplace event delivered twice | The consumer applies it once and records the duplicate |
+| Bank settles the original payment after the case paid an adjustment | The resolved case does not reopen or move |
+| Payout responses lost on every attempt, past all retries | Run reported as `injected_fault`; still exactly one payment and no safety violation (`test_a_fault_that_outlasts_every_retry_is_reported_and_still_writes_at_most_once`) |
+
 ## Incidents found by running the system
 
 * **2026-10-13, event consumer could not write.** The consumer process imported only the
@@ -60,3 +80,7 @@ without a test is a plan, not a property.
 ## Not yet handled
 
 * Retention of published outbox rows and marketplace idempotency records.
+* A settlement that arrives after Onramp paid an adjustment leaves the worker paid twice. The
+  case correctly stays resolved, but nothing flags the overpayment for finance.
+* A policy search failure fails the investigation before it is stored, so failed attempts
+  leave no `investigation_run` record, unlike model provider failures.

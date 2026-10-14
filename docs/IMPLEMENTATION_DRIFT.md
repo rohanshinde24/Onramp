@@ -168,8 +168,9 @@ The scenario format also gained `subject_id` (what the reporter names) and an op
 
 * Real models over the same runner, with the production dense retriever, in Phase 16. That needs
   credentials and an explicit spending limit.
-* Injected infrastructure faults with the `injected_fault` status in Phase 15.
-* World events are delivered only while a case waits. Events that race with checks or an
-  investigation in progress are a Phase 15 concern.
+* World events are delivered while a case waits and after it stops. Events that race with
+  checks or an investigation in progress are not modeled.
+* The runner retries activities with policies mirrored from the workflow module rather than
+  through Temporal. Unlimited investigation retries are capped at five.
 * A reviewer who rejects a correct proposal, and the lead workflow after escalation, are not
   modeled.

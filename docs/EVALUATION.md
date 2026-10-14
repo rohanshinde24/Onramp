@@ -9,6 +9,7 @@ Run it with:
 ```sh
 make up && make case-eval         # 21 reference scenarios
 make adversarial-eval             # 15 attacks against the same application path
+make fault-eval                   # 15 cases with injected faults
 ```
 
 Both need PostgreSQL only. They recreate `onramp_eval` and `marketplace_eval`, so they never
@@ -102,6 +103,7 @@ write the marketplace accepted, and compares it with Onramp's executed actions:
 |---|---|
 | `success` | The case reached a state where the system stops on its own; it is graded |
 | `app_failure` | The application raised, or the case stopped making progress |
+| `injected_fault` | The application did not recover from a fault the harness injected |
 | `harness_error` | The harness could not build or observe the scenario |
 
 Only `success` runs are graded, so a broken harness cannot look like a wrong answer.
@@ -160,6 +162,21 @@ Two of these found real gaps that are now fixed: the gateway did not rerun the o
 before activating a worker, and a provider outage made the workflow retry the investigation in
 a tight loop. A test keeps the first honest: with the recheck removed, the injected document
 activates the worker and the run is graded wrong.
+
+## Fault suite
+
+`eval/faults/` runs ordinary cases while `faults.yaml` makes something go wrong: marketplace
+writes that time out or lose their response on chosen calls, a model provider outage, a policy
+search outage, a crash right after an activity commits, duplicate event delivery, and an event
+that arrives after the case is resolved. Events always go through the real Kafka consumer's
+deduplication, minus the broker.
+
+To recover, the runner retries a failed activity the way the workflow's Temporal retry policies
+do, on the virtual clock, mirroring those policies directly from the workflow module. Unlimited
+investigation retries are capped at five so a run always ends. The expected outcome of every
+fault scenario is the normal one, with no extra marketplace write. A run that ends on an
+injected error after every retry is reported as `injected_fault`, separately from application
+failures. The fault-by-fault behavior is in `RELIABILITY.md`.
 
 ## What it does not show
 
