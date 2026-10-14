@@ -141,6 +141,9 @@ class RecordedModel:
     # Cost of each answer when it was made; read by the meter for replayed turns.
     turn_costs: list[Decimal] = field(default_factory=list)
     last_replayed: bool = False
+    # Turns recorded by this model in this run. Replaying one (a retried investigation starts
+    # over) costs nothing and was already counted when it was made.
+    _recorded_here: set[int] = field(default_factory=set)
 
     @property
     def name(self) -> str:
@@ -157,7 +160,7 @@ class RecordedModel:
         if index < len(recording.turns) and recording.turns[index].digest == digest:
             turn = recording.turns[index]
             self.replayed_turns += 1
-            self.turn_costs.append(turn.cost_usd)
+            self.turn_costs.append(Decimal(0) if index in self._recorded_here else turn.cost_usd)
             self.last_replayed = True
             return turn.response()
 
@@ -168,6 +171,7 @@ class RecordedModel:
         dollars = cost(response.usage, price_for(self.key.model), batch=self.batch)
         recording.turns.append(_turn(digest, response, dollars, batch=self.batch))
         self.store.save(self.key, recording)
+        self._recorded_here.add(index)
         self.live_turns += 1
         self.turn_costs.append(dollars)
         self.last_replayed = False

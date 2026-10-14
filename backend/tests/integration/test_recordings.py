@@ -111,3 +111,17 @@ def test_a_changed_turn_is_asked_again_from_that_turn_on(run_recorded: tuple) ->
     assert 0 < meter.spent_usd < Decimal(str(second.cost_usd))
     assert correct
     assert [t.digest for t in store.load(key).turns][2] != "stale"
+
+
+def test_a_retry_replaying_this_runs_own_answers_is_not_counted_twice(tmp_path: Path) -> None:
+    store = RecordingStore(tmp_path)
+    provider = _FakeProvider()
+    model = RecordedModel(RecordingKey(MODEL, "investigator-v1", SCENARIO), store, lambda: provider)
+    opening = [Message("user", text="Investigate this case. Start with get_case.")]
+
+    model.respond("system", opening, [])
+    model.respond("system", opening, [])  # the investigation started over
+
+    assert provider.calls == 1
+    assert model.turn_costs[1] == 0
+    assert model.turn_costs[0] > 0
