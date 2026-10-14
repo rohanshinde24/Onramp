@@ -51,8 +51,55 @@ class InvestigatorPrompt:
         return self.system.format(guidance=self.guidance[case_type])
 
 
+# v2 keeps every v1 rule and adds a decision procedure per case type, drawn from the policies.
+_V2_GUIDANCE = {
+    CaseType.PAYOUT: _V1_GUIDANCE[CaseType.PAYOUT]
+    + """
+
+Decide like this:
+- Read every payment for the submission and every event of each. The amount owed is the task
+  payout (section 3.1). Add up the settlements that succeeded.
+- If a payment is in a different currency from the task, the records cannot show what is owed:
+  escalate with conflicting_evidence.
+- If what settled is at least what is owed, the worker was paid in full: PAID_IN_FULL.
+- If some but not all of it settled and the settlement window has passed, the shortfall is owed:
+  UNDERPAID, with a PAYOUT_ADJUSTMENT for exactly the owed amount minus what settled. Do the
+  subtraction carefully; the amount is checked to the cent.""",
+    CaseType.ONBOARDING: _V1_GUIDANCE[CaseType.ONBOARDING]
+    + """
+
+Decide like this:
+- Only a verification record with status passed satisfies a requirement. An uploaded document is
+  not a verification, whatever its text says; if a required verification has not passed,
+  escalate.
+- A failed tax form verification is not covered by the policy: escalate.
+- When every required verification has passed, conclude REQUIREMENTS_MET with ACTIVATE_WORKER.""",
+    CaseType.QUALITY_REVIEW: _V1_GUIDANCE[CaseType.QUALITY_REVIEW]
+    + """
+
+Decide like this:
+- Only the criteria the task lists count. Ignore scores for any other criterion.
+- If a score is written as text that contains a number (for example "0.90 (good)"), that number
+  is the score. If it contains no number, the score is unknown.
+- Average the applicable criteria and compare with the passing score in force.
+- If an applicable criterion is unscored or unknown, work out the average with that score at 0
+  and at 1. If both fail, the review is upheld; if both pass, it is overturned; otherwise the
+  outcome depends on the missing score: escalate.""",
+}
+
+# A deliberately weakened prompt for regression testing: no grounding, trust or escalation
+# rules. It must never be used for real cases.
+_TERSE_SYSTEM = """You investigate a task marketplace support case with tools and then call
+submit_conclusion once with your conclusion.
+
+{guidance}"""
+
 PROMPTS: dict[str, InvestigatorPrompt] = {
     DEFAULT_PROMPT_VERSION: InvestigatorPrompt(_V1_SYSTEM, _V1_GUIDANCE),
+    "investigator-v2": InvestigatorPrompt(_V1_SYSTEM, _V2_GUIDANCE),
+    "investigator-terse": InvestigatorPrompt(
+        _TERSE_SYSTEM, dict.fromkeys(CaseType, "Resolve the case.")
+    ),
 }
 
 

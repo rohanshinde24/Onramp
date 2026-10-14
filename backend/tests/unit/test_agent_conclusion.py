@@ -135,3 +135,15 @@ def test_prompt_versions_are_explicit_and_unknown_versions_fail() -> None:
     assert "untrusted_text" in system_prompt(CaseType.PAYOUT, DEFAULT_PROMPT_VERSION)
     with pytest.raises(UnknownPromptVersionError):
         system_prompt(CaseType.PAYOUT, "investigator-v99")
+
+
+def test_every_prompt_renders_for_every_case_type_and_v2_extends_v1() -> None:
+    from onramp.agent.prompts import PROMPTS, system_prompt
+
+    for version in PROMPTS:
+        for case_type in CaseType:
+            assert "submit_conclusion" in system_prompt(case_type, version)
+    for case_type in CaseType:
+        assert system_prompt(case_type, "investigator-v2").startswith(
+            system_prompt(case_type).rsplit("\n\n", 1)[0]
+        )
