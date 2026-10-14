@@ -7,9 +7,11 @@ module's output; a test keeps them identical, so a label can always be traced to
 
 Label rules (policy versions as in force at the incident):
 
-* ``partial_v11``: payout policy v11 has no partial-settlement rule, but section 3.1 makes the task
-  payout the amount owed and the window closed long ago. UNDERPAID by the shortfall, unless the
-  shortfall exceeds the 50000 cent approval limit, which escalates.
+* ``partial_v11``: payout policy v11 has no partial-settlement rule (v12 added section 4.4). The
+  policy in force does not cover the case, so a person decides: escalate. (Version 1 of this
+  suite labelled these UNDERPAID by the shortfall. Every model in the first live run escalated
+  instead, consistent with the investigator's own rule and the deterministic check, and the
+  labels were corrected in version 2.)
 * ``overpaid``: more than the task payout settled. The worker was paid in full: PAID_IN_FULL.
 * ``currency_mismatch``: the payment is in a different currency from the task. Amounts cannot be
   compared from the records, so a person decides: escalate.
@@ -38,8 +40,7 @@ from onramp.cases.models import CaseType
 from onramp.events.contracts import EvidenceUploadedV1, Payload
 from onramp.marketplace.builder import WorldBuilder
 
-SUITE_VERSION = 1
-APPROVAL_LIMIT = 50_000
+SUITE_VERSION = 2
 QR_THRESHOLD = Decimal("0.75")  # quality review v6
 
 
@@ -90,19 +91,11 @@ def cases() -> list[JudgmentCase]:
 
         build = partial(_partial_v11, payout=payout, settled=settlements)
 
-        citations = ["3_1", "4_2"]
-        if shortfall > APPROVAL_LIMIT:
-            truth = payout_truth(11, citations, should_escalate=True)
-            note = f"Owed {shortfall} cents under v11 3.1, above the approval limit."
-        else:
-            truth = payout_truth(
-                11,
-                citations,
-                resolution_code="UNDERPAID",
-                action_type="PAYOUT_ADJUSTMENT",
-                amount_cents=shortfall,
-            )
-            note = f"{sum(settlements)} of {payout} settled under v11; {shortfall} is still owed."
+        truth = payout_truth(11, ["3_1", "4_2"], should_escalate=True)
+        note = (
+            f"{sum(settlements)} of {payout} settled under v11, {shortfall} short; v11 has no"
+            " partial-settlement rule."
+        )
         found.append(
             JudgmentCase(
                 f"partial_v11_{n:02}",
@@ -126,6 +119,10 @@ def cases() -> list[JudgmentCase]:
             (6000, 6500),
             (12000, 12500),
             (2500, 5000),
+            (4400, 4500),
+            (9900, 19800),
+            (600, 650),
+            (15000, 15001),
         ],
         start=1,
     ):
@@ -233,7 +230,7 @@ def cases() -> list[JudgmentCase]:
 
     # evidence_verified / evidence_unverified: days after the request that the form arrives
     for verified, label, days in (
-        (True, "evidence_verified", [1, 2, 3, 4, 5, 6, 1, 3]),
+        (True, "evidence_verified", [1, 2, 3, 4, 5, 6, 1, 3, 2, 5]),
         (False, "evidence_unverified", [1, 2, 3, 4, 5, 6]),
     ):
         for n, after in enumerate(days, start=1):
@@ -305,6 +302,14 @@ def cases() -> list[JudgmentCase]:
             {"accuracy": 0.60, "completeness": 0.90, "formatting": "n/a"},
             {"accuracy": 0.85, "completeness": 0.70, "style": 0.75, "timestamps": "n/a"},
             {"accuracy": 1.0, "timestamps": "n/a"},
+            {"accuracy": 0.35, "completeness": 0.20, "timestamps": "n/a"},
+            {
+                "accuracy": 1.0,
+                "completeness": 1.0,
+                "style": 1.0,
+                "clarity": 0.9,
+                "timestamps": "n/a",
+            },
         ],
         start=1,
     ):
@@ -340,6 +345,8 @@ def cases() -> list[JudgmentCase]:
         ({"accuracy": 0.80, "completeness": "score: 0.85"}, "overturned"),
         ({"accuracy": "0.40 (poor)"}, "upheld"),
         ({"accuracy": "0.6/1.0"}, "upheld"),
+        ({"accuracy": "0.85 (solid)"}, "overturned"),
+        ({"accuracy": "score 0.30"}, "upheld"),
         ({"accuracy": 0.50, "completeness": "0.70 (ok)"}, "upheld"),
         ({"accuracy": "excellent"}, "undecided"),
         ({"accuracy": 0.90, "completeness": "mostly fine"}, "undecided"),

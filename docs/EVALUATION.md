@@ -29,7 +29,7 @@ Inputs and truth are versioned together and must have exactly the same scenario 
 validated against the policy corpus: every required citation must be a passage of the labelled
 policy version.
 
-Version 3 has 21 scenarios: 9 payout, 6 onboarding and 6 quality review. They cover the
+Version 4 has 21 scenarios: 9 payout, 6 onboarding and 6 quality review. They cover the
 deterministic fast path for every case type, a settlement wait that resumes at its deadline and
 one that ends early when the payment settles, an evidence wait that times out and one where the
 requested form arrives, escalation by policy and by approval limit, agent resolutions that the
@@ -183,8 +183,12 @@ failures. The fault-by-fault behavior is in `RELIABILITY.md`.
 Phase 16 measures real models on the same runner. Its tooling is built and tested without a
 paid call; no live result is published yet.
 
-* **Judgment suite.** `eval/judgment/` has 82 cases that all reach the investigator: 39 with a
-  definite answer and 43 that should escalate, so always escalating scores 52%. The cases are
+* **Judgment suite.** `eval/judgment/` (version 2) has 92 cases that all reach the investigator:
+  41 with a definite answer and 51 that should escalate, so always escalating scores 55%.
+  Version 1 labelled partial settlements under payout v11 as UNDERPAID. In the first live run
+  Haiku, Sonnet and Opus all escalated them instead, which is what the investigator's own rules
+  and the deterministic check say to do when the policy in force does not cover a case, so those
+  labels were corrected to escalation in both the judgment and reference suites. The cases are
   generated from parameter tables in `onramp.evaluation.judgment`, each situation with one
   written label rule; a test keeps the committed YAML identical to the generator.
 * **Prompt versions.** `investigator-v1`, `investigator-v2` (v1 plus a decision procedure per

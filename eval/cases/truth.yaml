@@ -3,7 +3,7 @@
 #
 # required_citations is every policy passage the correct decision rests on. The policy is the
 # version in force at the case's incident time.
-version: 3
+version: 4
 truths:
   - id: payout_settlement_failed
     resolution_code: MISSING_PAYOUT
@@ -88,16 +88,15 @@ truths:
       limit, so section 7.1 sends it to a lead.
 
   - id: payout_partial_settlement_v11
-    resolution_code: UNDERPAID
-    action_type: PAYOUT_ADJUSTMENT
-    amount_cents: 1500
+    should_escalate: true
     required_citations: [payout_v11_section_3_1, payout_v11_section_4_2]
     policy_id: payout
     policy_version: 11
     note: >-
       The incident falls under v11, which has no partial-settlement rule, so checks hand it to
-      investigation. Section 3.1 still defines the amount owed as the task payout, and the
-      window closed long ago, so the shortfall is owed.
+      investigation and the investigator escalates: the policy in force does not cover it.
+      (Labelled UNDERPAID until version 4; every live model escalated, consistent with the
+      system's own rules, and the label was corrected.)
 
   - id: onboarding_requirements_met
     resolution_code: REQUIREMENTS_MET

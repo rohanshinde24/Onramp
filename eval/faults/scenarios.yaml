@@ -1,7 +1,7 @@
 # Fault-injection scenarios. Each runs an ordinary case while faults.yaml makes something go
 # wrong: lost or timed-out marketplace writes, a model outage, a crash right after an activity
 # commits, or duplicate and late events. The expected outcome is the normal one.
-version: 1
+version: 2
 scenarios:
 - id: lost_response_retried_by_gateway
   case_type: payout

@@ -3,7 +3,7 @@
 # Each scenario names a deterministic world (backend/src/onramp/evaluation/worlds.py), the
 # subject the reporter names, and the reporter's words. The expected outcome lives in
 # truth.yaml, which the evaluation harness reads and the application never does.
-version: 3
+version: 4
 scenarios:
   - id: payout_settlement_failed
     case_type: payout

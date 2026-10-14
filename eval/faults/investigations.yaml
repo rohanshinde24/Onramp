@@ -1,5 +1,5 @@
 # Reference investigations reused from eval/cases for the fault scenarios that need the model.
-version: 1
+version: 2
 model: reference
 investigations:
   provider_outage_then_recovers: &id001
@@ -20,11 +20,11 @@ investigations:
   - &id006
     - tool: submit_conclusion
       args:
-        decision: resolve
-        resolution_code: UNDERPAID
+        decision: escalate
+        escalation_reason: policy_referral
         confidence: 0.8
         reason_codes:
-        - PARTIAL_SETTLEMENT
+        - PARTIAL_SETTLEMENT_NOT_COVERED
         citations:
         - payout_v11_section_3_1
         evidence_refs:
@@ -33,12 +33,8 @@ investigations:
         - payment:pay_107
         - payment_event:pay_107_auth
         - payment_event:pay_107_settled
-        proposed_action:
-          action_type: PAYOUT_ADJUSTMENT
-          amount_cents: 1500
-          currency: USD
-        rationale: The task listed 6000 cents and 4500 settled. Section 3.1 makes the task payout
-          the amount owed, and the settlement window closed in June, so 1500 is still owed.
+        rationale: The task listed 6000 cents and 4500 settled. Payout policy v11 has no rule for
+          a partial settlement, so the policy in force does not decide this; a lead should.
   crash_after_investigation_commit: *id001
   duplicate_evidence_upload:
   - - tool: get_case

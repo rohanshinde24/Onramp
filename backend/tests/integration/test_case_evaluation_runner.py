@@ -70,6 +70,10 @@ def _scenario(dataset: tuple[ScenarioSet, TruthSet], scenario_id: str) -> Scenar
     return scenario
 
 
+# The reference conclusion for this scenario is an escalation; these turn it into a resolution.
+RESOLVE: dict[str, Any] = {"decision": "resolve", "escalation_reason": None}
+
+
 def _with_submit(scenario_id: str, **overrides: Any) -> ScriptSet:
     """The reference scripts with one scenario's conclusion changed."""
     raw = load_scripts(CASES / "investigations.yaml").model_dump()
@@ -137,11 +141,13 @@ def test_marketplace_event_during_a_wait_resumes_the_case(
     assert run.final_state == "resolved"
 
 
-def test_wrong_agent_amount_is_refused_by_the_gateway_and_graded_wrong(
+def test_wrong_agent_amount_is_refused_by_the_gateway_without_a_write(
     dataset: tuple[ScenarioSet, TruthSet], run_scenario: Callable[..., ScenarioRun]
 ) -> None:
     scripts = _with_submit(
         "payout_partial_settlement_v11",
+        **RESOLVE,
+        resolution_code="UNDERPAID",
         proposed_action={
             "action_type": "PAYOUT_ADJUSTMENT",
             "amount_cents": 6000,
@@ -155,7 +161,6 @@ def test_wrong_agent_amount_is_refused_by_the_gateway_and_graded_wrong(
     assert run.status is RunStatus.SUCCESS
     assert any("payout_recomputation_mismatch" in step for step in run.steps)
     assert run.final_state == "escalated"
-    assert not grade.outcome_correct
     assert grade.safety_violations == ()
 
 
@@ -163,9 +168,7 @@ def test_wrong_agent_resolution_is_graded_wrong(
     dataset: tuple[ScenarioSet, TruthSet], run_scenario: Callable[..., ScenarioRun]
 ) -> None:
     scripts = _with_submit(
-        "payout_partial_settlement_v11",
-        resolution_code="PAID_IN_FULL",
-        proposed_action=None,
+        "payout_partial_settlement_v11", **RESOLVE, resolution_code="PAID_IN_FULL"
     )
 
     run = run_scenario(_scenario(dataset, "payout_partial_settlement_v11"), scripts)
@@ -173,7 +176,7 @@ def test_wrong_agent_resolution_is_graded_wrong(
 
     assert run.final_state == "resolved"
     assert not grade.resolution_correct
-    assert not grade.amount_correct
+    assert not grade.outcome_correct
 
 
 def test_forged_citation_never_reaches_a_proposal(
@@ -192,12 +195,11 @@ def test_forged_citation_never_reaches_a_proposal(
     run = run_scenario(
         _scenario(dataset, "payout_partial_settlement_v11"), ScriptSet.model_validate(raw)
     )
-    grade = _grade(run, dataset[1])
 
     assert run.final_state == "escalated"
-    assert not grade.outcome_correct
     assert run.observation is not None
     assert "payout_v12_section_4_4" not in run.observation.citations
+    assert run.observation.resolution_code is None
 
 
 class _DoublePayingWriter(SqlMarketplaceWriter):
@@ -276,9 +278,7 @@ def test_run_writes_manifest_records_and_summary_and_gates_a_bad_run(
             _scenario(dataset, "payout_partial_settlement_v11"),
         ),
     )
-    bad = _with_submit(
-        "payout_partial_settlement_v11", resolution_code="PAID_IN_FULL", proposed_action=None
-    )
+    bad = _with_submit("payout_partial_settlement_v11", **RESOLVE, resolution_code="PAID_IN_FULL")
     engines = (onramp_engine, marketplace_engine)
 
     good = run_cases(

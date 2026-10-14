@@ -1,6 +1,6 @@
 # Expected outcomes for the fault scenarios: the same answer the case gets with no fault,
 # reached through recovery, with no extra marketplace write.
-version: 1
+version: 2
 truths:
 - id: lost_response_retried_by_gateway
   resolution_code: MISSING_PAYOUT
@@ -55,15 +55,13 @@ truths:
   note: The document request lands but its response is lost; checks rerun and repeat it under the
     same key.
 - id: provider_outage_then_recovers
-  resolution_code: UNDERPAID
-  action_type: PAYOUT_ADJUSTMENT
-  amount_cents: 1500
   required_citations: &id002
   - payout_v11_section_3_1
   - payout_v11_section_4_2
   policy_id: payout
   policy_version: 11
   note: The model provider fails twice; the investigation is retried with backoff and concludes.
+  should_escalate: true
 - id: crash_after_checks_commit
   resolution_code: PAID_IN_FULL
   required_citations: &id004
@@ -73,14 +71,12 @@ truths:
   policy_version: 12
   note: Checks commit their proposal and the process dies; the retry finds the work done.
 - id: crash_after_investigation_commit
-  resolution_code: UNDERPAID
-  action_type: PAYOUT_ADJUSTMENT
-  amount_cents: 1500
   required_citations: *id002
   policy_id: payout
   policy_version: 11
   note: The investigation commits its proposal and the process dies; the retry does not investigate
     again.
+  should_escalate: true
 - id: crash_after_execution_commit
   resolution_code: MISSING_PAYOUT
   action_type: PAYOUT_ADJUSTMENT
@@ -129,11 +125,9 @@ truths:
   note: The bank settles the original payment weeks after the adjustment. The resolved case must not
     reopen or move.
 - id: search_outage_then_recovers
-  resolution_code: UNDERPAID
-  action_type: PAYOUT_ADJUSTMENT
-  amount_cents: 1500
   required_citations: *id002
   policy_id: payout
   policy_version: 11
   note: Policy search fails twice mid-investigation; the investigation is retried from the start with
     backoff and concludes.
+  should_escalate: true
