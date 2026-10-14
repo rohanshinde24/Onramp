@@ -25,6 +25,8 @@ EVIDENCE_KINDS = frozenset(
     }
 )
 _REF = re.compile(r"^([a-z_]+):([A-Za-z0-9_.-]{1,64})$")
+# Reason codes are upper snake case, such as SETTLEMENT_FAILED.
+REASON_CODE_PATTERN = r"^[A-Z][A-Z0-9_]{0,63}$"
 
 
 class PayoutAdjustmentParams(BaseModel):
@@ -69,7 +71,7 @@ class ProposalRequest(BaseModel):
     @classmethod
     def _valid_reason_codes(cls, codes: list[str]) -> list[str]:
         for code in codes:
-            if not re.fullmatch(r"[A-Z][A-Z0-9_]{0,63}", code):
+            if not re.fullmatch(REASON_CODE_PATTERN, code):
                 raise ValueError(f"malformed reason code: {code!r}")
         return codes
 

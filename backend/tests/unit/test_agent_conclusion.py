@@ -147,3 +147,16 @@ def test_every_prompt_renders_for_every_case_type_and_v2_extends_v1() -> None:
         assert system_prompt(case_type, "investigator-v2").startswith(
             system_prompt(case_type).rsplit("\n\n", 1)[0]
         )
+
+
+def test_reason_codes_must_have_the_format_a_proposal_requires() -> None:
+    with pytest.raises(ValidationError, match="pattern"):
+        AgentConclusion.model_validate(
+            {
+                "decision": "escalate",
+                "escalation_reason": "operator_judgment",
+                "confidence": 0.5,
+                "reason_codes": ["within_dispute_window"],
+                "rationale": "x",
+            }
+        )

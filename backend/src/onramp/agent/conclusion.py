@@ -7,14 +7,14 @@ any model whether it "looks grounded".
 """
 
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from onramp.cases.escalation import EscalationReason
 from onramp.cases.models import CaseType
 from onramp.cases.resolutions import RESOLUTIONS, ActionType, ResolutionCode
-from onramp.proposals.content import ProposalRequest
+from onramp.proposals.content import REASON_CODE_PATTERN, ProposalRequest
 
 
 class ProposedAction(BaseModel):
@@ -31,7 +31,11 @@ class AgentConclusion(BaseModel):
     resolution_code: ResolutionCode | None = None
     escalation_reason: EscalationReason | None = None
     confidence: float = Field(ge=0, le=1)
-    reason_codes: list[str] = Field(default_factory=list, max_length=10)
+    # The same format a proposal requires, stated in the schema the model sees, so a malformed
+    # code is a correctable validation problem rather than a failure after the conclusion.
+    reason_codes: list[Annotated[str, StringConstraints(pattern=REASON_CODE_PATTERN)]] = Field(
+        default_factory=list, max_length=10
+    )
     citations: list[str] = Field(default_factory=list, max_length=20)
     evidence_refs: list[str] = Field(default_factory=list, max_length=50)
     proposed_action: ProposedAction | None = None

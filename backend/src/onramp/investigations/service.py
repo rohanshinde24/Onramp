@@ -10,6 +10,7 @@ import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
 
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -30,7 +31,7 @@ from onramp.checks.models import CheckRun
 from onramp.db.types import new_id
 from onramp.marketplace.reader import MarketplaceReader
 from onramp.policy.search import PolicyRetriever
-from onramp.proposals.service import create_proposal
+from onramp.proposals.service import InvalidProposalError, create_proposal
 
 log = logging.getLogger(__name__)
 Clock = Callable[[], datetime]
@@ -131,16 +132,26 @@ class InvestigationService:
         conclusion = result.conclusion
         if result.status == "concluded" and conclusion is not None:
             if conclusion.decision == "resolve":
-                proposal = create_proposal(
-                    session,
-                    case,
-                    to_proposal_request(conclusion),
-                    proposer=Actor.agent(),
-                    occurred_at=now,
-                )
-                run.proposal_id = proposal.id
-                return
-            reason = conclusion.escalation_reason or EscalationReason.OPERATOR_JUDGMENT
+                try:
+                    with session.begin_nested():
+                        proposal = create_proposal(
+                            session,
+                            case,
+                            to_proposal_request(conclusion),
+                            proposer=Actor.agent(),
+                            occurred_at=now,
+                        )
+                except (ValidationError, InvalidProposalError) as exc:
+                    # Validation should have caught it; if it did not, the case must not stay
+                    # stuck in investigation retrying the same answer. A person decides.
+                    run.status = "invalid_output"
+                    run.problems = [*run.problems, f"conclusion is not a valid proposal: {exc}"]
+                    reason = EscalationReason.INVESTIGATION_FAILED
+                else:
+                    run.proposal_id = proposal.id
+                    return
+            else:
+                reason = conclusion.escalation_reason or EscalationReason.OPERATOR_JUDGMENT
         else:
             reason = EscalationReason.INVESTIGATION_FAILED
         case.escalation_reason = reason.value

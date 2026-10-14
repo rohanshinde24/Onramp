@@ -173,3 +173,23 @@ def test_only_cases_under_investigation_are_investigated(world: World) -> None:
 
     with pytest.raises(NotInvestigatingError):
         _service(world, ScriptedModel([])).run("acme", case.id, Actor.system())
+
+
+def test_a_conclusion_that_cannot_become_a_proposal_escalates_instead_of_crashing(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from onramp.proposals.service import InvalidProposalError
+
+    case_id = _investigating_case(world)
+
+    def refuse(_: object) -> None:
+        raise InvalidProposalError("does not fit the catalogue")
+
+    monkeypatch.setattr("onramp.investigations.service.to_proposal_request", refuse)
+
+    run = _service(world, ScriptedModel([*GATHER, submit()])).run("acme", case_id, Actor.system())
+
+    assert run.status == "invalid_output"
+    assert any("not a valid proposal" in p for p in run.problems)
+    case = _case(world[0], case_id)
+    assert (case.state, case.escalation_reason) == (CaseState.ESCALATED, "investigation_failed")
