@@ -85,7 +85,7 @@ validations.
 ## Provider
 
 `AnthropicChatModel` (optional `anthropic` extra) defaults to `claude-opus-5-5` at an explicit
-effort level. It enables server-side refusal fallback, replays assistant turns exactly as
+effort level. It enables server-side refusal fallback on Opus and Sonnet (Haiku has none), replays assistant turns exactly as
 returned so thinking blocks survive, sends tool results with `is_error`, and uses automatic
 prompt caching over the stable tool and system prefix. Tests use `ScriptedModel`; normal
 development and CI never call a live model.

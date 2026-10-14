@@ -37,6 +37,7 @@ class FakeClient:
         self.requests: list[dict[str, Any]] = []
         self._result = result
         self.beta = SimpleNamespace(messages=SimpleNamespace(create=self._create))
+        self.messages = SimpleNamespace(create=self._create)
 
     def _create(self, **kwargs: Any) -> Any:
         self.requests.append(kwargs)
@@ -139,3 +140,15 @@ def test_configuration_errors_are_not_hidden() -> None:
 
     with pytest.raises(anthropic.AuthenticationError):
         AnthropicChatModel(FakeClient(error)).respond("s", [Message("user", text="x")], [TOOL])
+
+
+def test_models_without_a_refusal_fallback_are_called_without_it() -> None:
+    client = FakeClient(_response(USE))
+    model = AnthropicChatModel(client, model="claude-haiku-5-5")
+
+    model.respond("system prompt", [Message("user", text="go")], [TOOL])
+
+    (request,) = client.requests
+    assert request["model"] == "claude-haiku-5-5"
+    assert "fallbacks" not in request
+    assert "betas" not in request

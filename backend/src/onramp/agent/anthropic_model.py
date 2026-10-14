@@ -3,8 +3,9 @@
 * Assistant turns are replayed exactly as returned, so thinking and fallback blocks survive.
 * Tool and system definitions are a stable prefix; automatic prompt caching reuses it on
   every turn of the investigation.
-* Server-side refusal fallback is on (``fallbacks: "default"``). A refusal that survives it
-  ends the investigation and the case escalates.
+* Server-side refusal fallback is on (``fallbacks: "default"``) for models that support it. A
+  refusal that survives it, or any refusal on other models, ends the investigation and the case
+  escalates.
 * Transient provider failures surface as ModelUnavailableError after the SDK's own retries;
   configuration errors (bad request, authentication) are raised unchanged.
 """
@@ -24,6 +25,9 @@ from onramp.agent.model import (
 
 DEFAULT_MODEL = "claude-opus-5-5"
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
+# Models that accept the server-side refusal fallback. Haiku has none; sending it would fail
+# every call, so those models are called without it and a refusal escalates.
+FALLBACK_MODELS = frozenset({"claude-opus-5-5", "claude-sonnet-5-5"})
 
 
 class AnthropicChatModel:
@@ -55,12 +59,14 @@ class AnthropicChatModel:
     ) -> ModelResponse:
         import anthropic
 
+        params = self.request(system, transcript, tools)
         try:
-            response = self._client.beta.messages.create(
-                **self.request(system, transcript, tools),
-                betas=[FALLBACK_BETA],
-                fallbacks="default",
-            )
+            if self._model in FALLBACK_MODELS:
+                response = self._client.beta.messages.create(
+                    **params, betas=[FALLBACK_BETA], fallbacks="default"
+                )
+            else:
+                response = self._client.messages.create(**params)
         except (
             anthropic.APIConnectionError,  # includes APITimeoutError
             anthropic.RateLimitError,
