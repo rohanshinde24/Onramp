@@ -154,7 +154,9 @@ services:
     environment:
       <<: *app-env
       ELASTICSEARCH_URL: http://elasticsearch:9200
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?set ANTHROPIC_API_KEY to run the agent worker}
+      # Empty unless set. Compose reads this file for every profile, so a required variable here
+      # would break `make up`; the agent worker itself refuses to start without a key.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     depends_on:
       migrate:
         condition: service_completed_successfully

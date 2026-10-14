@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import os
 import sys
 
 from elasticsearch import Elasticsearch
@@ -26,6 +27,8 @@ def main() -> None:
     settings = get_settings()
     if not settings.elasticsearch_url:
         sys.exit("ELASTICSEARCH_URL is not set")
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        sys.exit("ANTHROPIC_API_KEY is not set; the agent worker needs model credentials")
     configure_logging(settings.log_level)
     provider = configure_tracing(settings, process_role="agent-worker")
     engine = make_engine(str(settings.database_url))
