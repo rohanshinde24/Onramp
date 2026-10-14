@@ -2,12 +2,15 @@
 
 import json
 from collections.abc import Callable
+from dataclasses import replace
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 import pytest
 from sqlalchemy import Engine
 
+from onramp.agent.model import ChatModel, Usage
 from onramp.evaluation.case_grading import CaseGrade, grade_case
 from onramp.evaluation.report import gate_failures, run_cases
 from onramp.evaluation.runner import (
@@ -16,6 +19,7 @@ from onramp.evaluation.runner import (
 )
 from onramp.evaluation.scenarios import ScenarioInput, ScenarioSet, TruthSet, load_scenarios
 from onramp.evaluation.scripted import ScriptSet, load_scripts
+from onramp.evaluation.spend import SpendMeter
 from onramp.marketplace.records import PaymentRecord
 from onramp.marketplace.writer import SqlMarketplaceWriter
 from tests.integration.eval_support import ROOT, Sessions, WriterFactory, make_runner
@@ -312,3 +316,46 @@ def test_run_writes_manifest_records_and_summary_and_gates_a_bad_run(
     assert gate_failures(good.summary, 1.0) == []
     assert wrong.summary["wrong_outcomes"] == ["payout_partial_settlement_v11"]
     assert gate_failures(wrong.summary, 1.0) == ["outcome accuracy 0.500 < 1.000"]
+
+
+class _PricedScript:
+    """The reference script, reporting usage as if it were a live Sonnet call."""
+
+    def __init__(self, inner: ChatModel) -> None:
+        self._inner = inner
+        self.name = "claude-sonnet-5-5@low"
+
+    def respond(self, system: str, transcript: Any, tools: Any) -> Any:
+        response = self._inner.respond(system, transcript, tools)
+        return replace(response, usage=Usage(input_tokens=100_000, output_tokens=10_000))
+
+
+def test_a_run_stops_at_its_spending_cap_and_fails_the_gate(
+    dataset: tuple[ScenarioSet, TruthSet],
+    onramp_engine: Engine,
+    marketplace_engine: Engine,
+    onramp_committed: Sessions,
+    marketplace_committed: Sessions,
+    tmp_path: Path,
+) -> None:
+    scripts = load_scripts(CASES / "investigations.yaml")
+    subset = ScenarioSet(
+        version=1,
+        scenarios=(
+            _scenario(dataset, "payout_partial_settlement_v11"),  # about $0.30 at these usages
+            _scenario(dataset, "onboarding_unverified_upload"),
+            _scenario(dataset, "payout_paid_in_full"),
+        ),
+    )
+    runner = make_runner(
+        (onramp_engine, marketplace_engine), onramp_committed, marketplace_committed, scripts
+    )
+    runner._models = lambda scenario_id: _PricedScript(scripts.model_for(scenario_id))
+    runner._meter = SpendMeter(cap_usd=Decimal("0.25"))
+
+    outcome = run_cases(runner, subset, dataset[1], tmp_path / "capped", {"run_id": "capped"})
+
+    assert [run.scenario_id for run in outcome.runs] == ["payout_partial_settlement_v11"]
+    assert outcome.runs[0].cost_usd > 0.25
+    assert outcome.summary["stopped"].startswith("spending cap reached before onboarding")
+    assert gate_failures(outcome.summary, 1.0)[0].startswith("stopped early")

@@ -24,6 +24,7 @@ from onramp.evaluation.case_grading import (
 )
 from onramp.evaluation.runner import CaseEvaluationRunner, RunStatus, ScenarioRun
 from onramp.evaluation.scenarios import ScenarioSet, TruthSet
+from onramp.evaluation.spend import SpendCapReachedError
 
 RECORD_SCHEMA_VERSION = 1
 
@@ -75,9 +76,14 @@ def run_cases(
     out.mkdir(parents=True)
     _write_json(out / "manifest.json", manifest)
     runs, grades = [], []
+    stopped: str | None = None
     with (out / "results.jsonl").open("w") as results:
         for scenario in scenarios.scenarios:
-            run = runner.run(scenario)
+            try:
+                run = runner.run(scenario)
+            except SpendCapReachedError as exc:
+                stopped = f"spending cap reached before {scenario.id}: {exc}"
+                break
             grade = None
             if run.status is RunStatus.SUCCESS and run.observation is not None:
                 grade = grade_case(run.observation, labels[scenario.id])
@@ -85,7 +91,10 @@ def run_cases(
             runs.append(run)
             results.write(json.dumps(_record(manifest["run_id"], run, grade)) + "\n")
             results.flush()
-    summary = summarize_runs(runs, grades)
+    summary = summarize_runs(runs, grades) | {
+        "scenarios_planned": len(scenarios.scenarios),
+        "stopped": stopped,
+    }
     _write_json(out / "summary.json", summary)
     _write_json(out / "manifest.json", {**manifest, "finished_at": datetime.now(UTC).isoformat()})
     return RunOutcome(tuple(runs), tuple(grades), summary)
@@ -93,9 +102,13 @@ def run_cases(
 
 def summarize_runs(runs: Sequence[ScenarioRun], grades: Sequence[CaseGrade]) -> dict[str, Any]:
     statuses = Counter(run.status.value for run in runs)
+    total_cost = sum(run.cost_usd for run in runs)
+    correct = sum(grade.outcome_correct for grade in grades)
     return {
         "scenarios": len(runs),
         "status": {status.value: statuses.get(status.value, 0) for status in RunStatus},
+        "cost_usd": round(total_cost, 6),
+        "cost_per_correct_outcome_usd": round(total_cost / correct, 6) if correct else None,
         "graded": summarize_cases(grades) if grades else None,
         "wrong_outcomes": sorted(g.scenario_id for g in grades if not g.outcome_correct),
         "safety_violations": {
@@ -106,7 +119,8 @@ def summarize_runs(runs: Sequence[ScenarioRun], grades: Sequence[CaseGrade]) -> 
 
 def gate_failures(summary: dict[str, Any], min_outcome_accuracy: float) -> list[str]:
     """Why this run should fail a gate. Empty means it passes."""
-    failures = [
+    failures = [f"stopped early: {summary['stopped']}"] if summary.get("stopped") else []
+    failures += [
         f"{count} {status} run(s)"
         for status, count in summary["status"].items()
         if status != RunStatus.SUCCESS and count
@@ -130,6 +144,7 @@ def _record(run_id: str, run: ScenarioRun, grade: CaseGrade | None) -> dict[str,
         "case_id": run.case_id,
         "final_state": run.final_state,
         "faults": run.faults,
+        "cost_usd": run.cost_usd,
         "steps": run.steps,
         "wall_ms": run.wall_ms,
         "observation": _observation(run.observation) if run.observation else None,

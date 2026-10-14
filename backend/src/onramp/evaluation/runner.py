@@ -46,6 +46,7 @@ from onramp.evaluation.reviewers import HonestReviewer, ReviewContext, honest_re
 from onramp.evaluation.safety import safety_violations
 from onramp.evaluation.scenarios import ScenarioInput
 from onramp.evaluation.services import CaseServices, ServiceFactory, VirtualClock
+from onramp.evaluation.spend import MeteredModel, SpendCapReachedError, SpendMeter
 from onramp.evaluation.worlds import SERVICE, TENANT, WorldEvent, build_world, happen
 from onramp.events.consumer import ConsumerRunner, Outcome, RawMessage
 from onramp.events.contracts import contract_for
@@ -79,6 +80,7 @@ class ScenarioRun:
     final_state: str | None = None
     steps: list[str] = field(default_factory=list)
     faults: list[str] = field(default_factory=list)
+    cost_usd: float = 0.0
     error: str | None = None
     observation: CaseObservation | None = None
     wall_ms: int = 0
@@ -116,6 +118,7 @@ class CaseEvaluationRunner:
         *,
         reviewers: Callable[[str], HonestReviewer] = honest_reviewers,
         faults: Callable[[str], ScenarioFaults] = no_faults,
+        meter: SpendMeter | None = None,
         max_steps: int = DEFAULT_MAX_STEPS,
     ) -> None:
         self._onramp = onramp
@@ -126,6 +129,7 @@ class CaseEvaluationRunner:
         self._models = models
         self._reviewers = reviewers
         self._faults = faults
+        self._meter = meter or SpendMeter()
         self._max_steps = max_steps
 
     def run(self, scenario: ScenarioInput) -> ScenarioRun:
@@ -139,7 +143,7 @@ class CaseEvaluationRunner:
             clock = VirtualClock(world.opened_at)
             faults = self._faults(scenario.id)
             run.faults = faults.labels
-            model = faults.wrap_model(self._models(scenario.id))
+            model = MeteredModel(faults.wrap_model(self._models(scenario.id)), self._meter)
             services = self._services(clock, model, faults)
             reviewer = self._reviewers(scenario.id)
         except Exception as exc:  # any setup failure is the harness's
@@ -160,6 +164,8 @@ class CaseEvaluationRunner:
             reviewer.after_stop(case.review)
             run.final_state = self._after_stop(case)
             run.status = RunStatus.SUCCESS
+        except SpendCapReachedError:
+            raise  # the whole run stops; this scenario is not recorded
         except IntakeError as exc:
             # Refusing a report is a behavior to grade, not a failure to run.
             run.steps.append(f"intake_refused:{type(exc).__name__}")
@@ -169,6 +175,7 @@ class CaseEvaluationRunner:
             run.status = RunStatus.INJECTED_FAULT if injected else RunStatus.APP_FAILURE
             run.error = f"{type(exc).__name__}: {exc}"
 
+        run.cost_usd = float(model.spent_usd)
         if run.case_id is None and run.status is not RunStatus.SUCCESS:
             return _finish(run, started)  # failed before intake decided anything
         try:
@@ -268,7 +275,7 @@ class CaseEvaluationRunner:
                     raise InjectedCrashError(f"process died after {name} committed")
                 return result
             except Exception as exc:
-                if attempt == retry.attempts:
+                if attempt == retry.attempts or isinstance(exc, SpendCapReachedError):
                     raise
                 case.steps.append(f"retry:{name}:{type(exc).__name__}")
                 case.clock.advance_to(case.clock() + retry.delay(attempt))

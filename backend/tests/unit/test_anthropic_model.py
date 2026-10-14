@@ -77,6 +77,7 @@ def test_tool_calls_usage_and_raw_content_are_returned() -> None:
     assert response.tool_calls == (ToolCall("tu_1", "get_case", {}),)
     assert response.text == "Looking."
     assert response.usage.input_tokens == 1000  # cached input counts toward the budget
+    assert (response.usage.cache_read_tokens, response.usage.cache_write_tokens) == (900, 0)
     assert response.raw is not None
 
 

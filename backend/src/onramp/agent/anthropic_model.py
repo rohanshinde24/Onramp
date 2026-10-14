@@ -120,14 +120,16 @@ def from_wire(response: Any) -> ModelResponse:
         if b.type == "tool_use"
     )
     usage = response.usage
+    cache_read = getattr(usage, "cache_read_input_tokens", 0) or 0
+    cache_write = getattr(usage, "cache_creation_input_tokens", 0) or 0
     return ModelResponse(
         text=text,
         tool_calls=calls,
         usage=Usage(
-            input_tokens=(usage.input_tokens or 0)
-            + (getattr(usage, "cache_read_input_tokens", 0) or 0)
-            + (getattr(usage, "cache_creation_input_tokens", 0) or 0),
+            input_tokens=(usage.input_tokens or 0) + cache_read + cache_write,
             output_tokens=usage.output_tokens or 0,
+            cache_read_tokens=cache_read,
+            cache_write_tokens=cache_write,
         ),
         raw=response.content,
     )

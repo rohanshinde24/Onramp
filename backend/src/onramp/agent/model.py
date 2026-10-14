@@ -43,8 +43,13 @@ class Message:
 
 @dataclass(frozen=True)
 class Usage:
+    # Every input token, cached or not: what the investigation budget counts.
     input_tokens: int = 0
     output_tokens: int = 0
+    # The parts of input_tokens read from or written to the prompt cache; they are priced
+    # differently from the rest.
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
 
 
 @dataclass(frozen=True)

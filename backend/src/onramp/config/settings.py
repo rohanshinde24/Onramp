@@ -52,6 +52,10 @@ class Settings(BaseSettings):
     temporal_workflow_task_queue: str = "onramp-workflows"
     temporal_agent_task_queue: str = "onramp-agent"
 
+    # Required only for evaluation runs against a live model. The agent worker reads the
+    # provider's own environment variable instead.
+    anthropic_api_key: SecretStr | None = None
+
     otel_exporter_otlp_endpoint: str | None = None
 
 

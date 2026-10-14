@@ -11,7 +11,9 @@ hold one are assembled here.
 
 import argparse
 import sys
+from collections.abc import Callable
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 
 from sqlalchemy import create_engine, text
@@ -21,6 +23,7 @@ from sqlalchemy.orm import Session, sessionmaker
 import onramp.models  # noqa: F401 - every table must be mapped before any session is used
 from onramp.actions.evidence import EvidenceRequester
 from onramp.actions.gateway import ActionGateway
+from onramp.agent.anthropic_model import AnthropicChatModel
 from onramp.agent.model import ChatModel
 from onramp.agent.prompts import DEFAULT_PROMPT_VERSION, PROMPTS
 from onramp.approvals.service import ApprovalService
@@ -37,6 +40,7 @@ from onramp.evaluation.runner import CaseEvaluationRunner
 from onramp.evaluation.scenarios import load_scenarios, validate_truth
 from onramp.evaluation.scripted import KeywordPolicyRetriever, load_scripts
 from onramp.evaluation.services import CaseServices, VirtualClock
+from onramp.evaluation.spend import PRICES, SpendMeter
 from onramp.evaluation.worlds import reset_databases
 from onramp.investigations.service import InvestigationService
 from onramp.marketplace.faults import FaultyMarketplaceWriter
@@ -101,6 +105,14 @@ def _recreate(url: str) -> str:
     return target.set(database=name).render_as_string(hide_password=False)
 
 
+def _live_models(args: argparse.Namespace, api_key: str) -> tuple[Callable[[str], ChatModel], str]:
+    import anthropic  # optional dependency, needed only for live runs
+
+    client = anthropic.Anthropic(api_key=api_key, timeout=120.0)
+    model = AnthropicChatModel(client, model=args.model, effort=args.effort)
+    return (lambda _: model), model.name
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--scenarios", type=Path, default=CASES / "scenarios.yaml")
@@ -113,6 +125,17 @@ def main() -> None:
         "--faults", type=Path, help="scenario -> injected faults; none when omitted"
     )
     parser.add_argument("--prompt", choices=sorted(PROMPTS), default=DEFAULT_PROMPT_VERSION)
+    parser.add_argument(
+        "--model",
+        choices=sorted(PRICES),
+        help="investigate with this live model instead of the scripts; costs money",
+    )
+    parser.add_argument("--effort", choices=["low", "medium", "high"], default="medium")
+    parser.add_argument(
+        "--max-cost",
+        type=Decimal,
+        help="US dollars this run may spend on the model; required with --model",
+    )
     parser.add_argument("--min-outcome-accuracy", type=float, default=1.0)
     parser.add_argument(
         "--suite",
@@ -128,6 +151,15 @@ def main() -> None:
     corpus = load_corpus(ROOT / "policies")
     validate_truth(truth, corpus)
     scripts = load_scripts(args.scripts)
+    models: Callable[[str], ChatModel] = scripts.model_for
+    model_name = scripts.model_name
+    if args.model:
+        if args.max_cost is None or args.max_cost <= 0:
+            sys.exit("--model costs money: set --max-cost to a positive dollar amount")
+        if settings.anthropic_api_key is None:
+            sys.exit("ANTHROPIC_API_KEY is not set in the environment or .env")
+        models, model_name = _live_models(args, settings.anthropic_api_key.get_secret_value())
+    meter = SpendMeter(cap_usd=args.max_cost)
 
     onramp_url = _recreate(str(settings.database_url))
     marketplace_url = _recreate(str(settings.marketplace_database_url))
@@ -153,9 +185,10 @@ def main() -> None:
             prompt_version=args.prompt,
         ),
         corpus,
-        scripts.model_for,
+        models,
         reviewers=load_reviewers(args.reviewers) if args.reviewers else honest_reviewers,
         faults=load_faults(args.faults) if args.faults else no_faults,
+        meter=meter,
     )
 
     started = datetime.now(UTC)
@@ -182,7 +215,8 @@ def main() -> None:
         "scenario_set_version": scenarios.version,
         "truth_version": truth.version,
         "scenarios": len(scenarios.scenarios),
-        "model": scripts.model_name,
+        "model": model_name,
+        "spend_cap_usd": str(args.max_cost) if args.max_cost else None,
         "prompt_version": args.prompt,
         "retriever": "keyword_in_force",
         "reviewer": "per scenario" if args.reviewers else "honest: accepts and approves as shown",
@@ -192,7 +226,8 @@ def main() -> None:
     onramp_engine.dispose()
     marketplace_engine.dispose()
 
-    print(f"run {run_id}  commit {commit[:8]}  dirty={dirty}  model={scripts.model_name}")
+    print(f"run {run_id}  commit {commit[:8]}  dirty={dirty}  model={model_name}")
+    print(f"  spent ${outcome.summary['cost_usd']:.4f} on {meter.calls} model calls")
     for run in outcome.runs:
         grade = next((g for g in outcome.grades if g.scenario_id == run.scenario_id), None)
         verdict = "n/a" if grade is None else "correct" if grade.outcome_correct else "WRONG"
