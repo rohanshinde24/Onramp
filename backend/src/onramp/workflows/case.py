@@ -15,10 +15,10 @@ with workflow.unsafe.imports_passed_through():
     )
 
 _ACTIVITY_TIMEOUT = timedelta(minutes=2)
-_RETRY = RetryPolicy(maximum_attempts=5)
+ACTIVITY_RETRY = RetryPolicy(maximum_attempts=5)
 # A provider outage can outlast any fixed number of attempts. The case keeps waiting in
 # INVESTIGATING, retried with capped backoff, until the provider answers or a person acts.
-_INVESTIGATION_RETRY = RetryPolicy(
+INVESTIGATION_RETRY = RetryPolicy(
     initial_interval=timedelta(seconds=30),
     backoff_coefficient=2.0,
     maximum_interval=timedelta(minutes=10),
@@ -56,7 +56,7 @@ class CaseWorkflow:
                     "run_investigation",
                     request,
                     task_queue=request.agent_task_queue,
-                    retry_policy=_INVESTIGATION_RETRY,
+                    retry_policy=INVESTIGATION_RETRY,
                 )
                 continue
             if state is CaseState.EXECUTING:
@@ -100,7 +100,7 @@ class CaseWorkflow:
         request: CaseWorkflowInput,
         *,
         task_queue: str | None = None,
-        retry_policy: RetryPolicy = _RETRY,
+        retry_policy: RetryPolicy = ACTIVITY_RETRY,
     ) -> CaseSnapshot:
         return cast(
             CaseSnapshot,

@@ -1,0 +1,75 @@
+# Fault-injection scenarios. Each runs an ordinary case while faults.yaml makes something go
+# wrong: lost or timed-out marketplace writes, a model outage, a crash right after an activity
+# commits, or duplicate and late events. The expected outcome is the normal one.
+version: 1
+scenarios:
+- id: lost_response_retried_by_gateway
+  case_type: payout
+  world_fixture: payout_settlement_failed
+  subject_id: s_100
+  report: My payment for this task has a problem.
+- id: lost_responses_outlast_gateway_retries
+  case_type: payout
+  world_fixture: payout_settlement_failed
+  subject_id: s_100
+  report: My payment for this task has a problem.
+- id: activation_times_out_before_write
+  case_type: onboarding
+  world_fixture: onboarding_requirements_met
+  subject_id: w_ana
+  report: My account is still not active.
+- id: overturn_response_lost
+  case_type: quality_review
+  world_fixture: quality_review_inapplicable_criterion
+  subject_id: qr_200
+  report: The review of this task was unfair.
+- id: evidence_request_response_lost
+  case_type: onboarding
+  world_fixture: onboarding_missing_tax_form
+  subject_id: w_cho
+  report: My account is still not active.
+- id: provider_outage_then_recovers
+  case_type: payout
+  world_fixture: payout_partial_settlement_v11
+  subject_id: s_107
+  report: My payment for this task has a problem.
+- id: crash_after_checks_commit
+  case_type: payout
+  world_fixture: payout_paid_in_full
+  subject_id: s_101
+  report: My payment for this task has a problem.
+- id: crash_after_investigation_commit
+  case_type: payout
+  world_fixture: payout_partial_settlement_v11
+  subject_id: s_107
+  report: My payment for this task has a problem.
+- id: crash_after_execution_commit
+  case_type: payout
+  world_fixture: payout_settlement_failed
+  subject_id: s_100
+  report: My payment for this task has a problem.
+- id: crash_after_settlement_resume
+  case_type: payout
+  world_fixture: payout_within_window
+  subject_id: s_104
+  report: My payment for this task has a problem.
+- id: crash_after_evidence_timeout
+  case_type: onboarding
+  world_fixture: onboarding_missing_tax_form
+  subject_id: w_cho
+  report: My account is still not active.
+- id: duplicate_settlement_event
+  case_type: payout
+  world_fixture: payout_settles_during_window
+  subject_id: s_104
+  report: My payment for this task has a problem.
+- id: duplicate_evidence_upload
+  case_type: onboarding
+  world_fixture: onboarding_tax_form_arrives_verified
+  subject_id: w_cho
+  report: My account is still not active.
+- id: late_settlement_after_resolution
+  case_type: payout
+  world_fixture: payout_settlement_failed_then_late_settlement
+  subject_id: s_100
+  report: My payment for this task has a problem.

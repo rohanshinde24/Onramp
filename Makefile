@@ -1,7 +1,7 @@
 BACKEND := backend
 PY := $(BACKEND)/.venv/bin
 
-.PHONY: install lint format typecheck test test-integration test-kafka test-search check up down api-image migrate seed dlq-replay load-policies retrieval-eval case-eval adversarial-eval
+.PHONY: install lint format typecheck test test-integration test-kafka test-search check up down api-image migrate seed dlq-replay load-policies retrieval-eval case-eval adversarial-eval fault-eval
 
 install:
 	python3.13 -m venv $(BACKEND)/.venv
@@ -65,3 +65,10 @@ adversarial-eval:
 	$(PY)/onramp-case-eval --suite adversarial-eval --scenarios eval/adversarial/scenarios.yaml \
 		--truth eval/adversarial/truth.yaml --scripts eval/adversarial/investigations.yaml \
 		--reviewers eval/adversarial/reviewers.yaml
+
+# The same runner with injected faults: lost and timed-out writes, model outages, crashes after
+# commit, duplicate and late events.
+fault-eval:
+	$(PY)/onramp-case-eval --suite fault-eval --scenarios eval/faults/scenarios.yaml \
+		--truth eval/faults/truth.yaml --scripts eval/faults/investigations.yaml \
+		--faults eval/faults/faults.yaml

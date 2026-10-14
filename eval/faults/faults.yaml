@@ -1,0 +1,62 @@
+# What goes wrong in each scenario. See backend/src/onramp/evaluation/faults.py.
+version: 1
+faults:
+  lost_response_retried_by_gateway:
+  - kind: marketplace
+    operation: issue_adjustment
+    calls:
+    - 1
+    fault: lost_response
+  lost_responses_outlast_gateway_retries:
+  - kind: marketplace
+    operation: issue_adjustment
+    calls:
+    - 1
+    - 2
+    - 3
+    fault: lost_response
+  activation_times_out_before_write:
+  - kind: marketplace
+    operation: activate_worker
+    calls:
+    - 1
+    - 2
+    - 3
+    fault: timeout_before_write
+  overturn_response_lost:
+  - kind: marketplace
+    operation: overturn_review
+    calls:
+    - 1
+    - 2
+    - 3
+    fault: lost_response
+  evidence_request_response_lost:
+  - kind: marketplace
+    operation: request_document
+    calls:
+    - 1
+    fault: lost_response
+  provider_outage_then_recovers:
+  - kind: model_outage
+    failures: 2
+  crash_after_checks_commit:
+  - kind: crash_after
+    activity: run_case_checks
+  crash_after_investigation_commit:
+  - kind: crash_after
+    activity: run_investigation
+  crash_after_execution_commit:
+  - kind: crash_after
+    activity: execute_approved_action
+  crash_after_settlement_resume:
+  - kind: crash_after
+    activity: resume_settlement_checks
+  crash_after_evidence_timeout:
+  - kind: crash_after
+    activity: expire_evidence_wait
+  duplicate_settlement_event:
+  - kind: duplicate_events
+  duplicate_evidence_upload:
+  - kind: duplicate_events
+  late_settlement_after_resolution: []

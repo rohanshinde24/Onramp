@@ -227,6 +227,16 @@ def _settlement_failed(w: WorldBuilder) -> None:
     )
 
 
+def _late_settlement(w: WorldBuilder) -> tuple[str, str, Payload]:
+    """The bank settles the failed payment weeks later, after the case paid an adjustment."""
+    w.payment_event("pay_100_late", "pay_100", "settlement_succeeded", 8400, T + 30 * DAY)
+    return (
+        "payment.settled",
+        "pay_100",
+        PaymentSettledV1(payment_id="pay_100", worker_id="w_sam", amount_cents=8400),
+    )
+
+
 def _paid_in_full(w: WorldBuilder) -> None:
     _work(w, 101, 5000, T - 10 * DAY)
     _payment(w, "pay_101", "w_sam", "s_101", 5000, T - 10 * DAY + 2 * HOUR, "settled")
@@ -416,6 +426,9 @@ def _criteria_unspecified(w: WorldBuilder) -> None:
 
 WORLDS: dict[str, World] = {
     "payout_settlement_failed": World(_settlement_failed),
+    "payout_settlement_failed_then_late_settlement": World(
+        _settlement_failed, events=(WorldEvent(T + 30 * DAY, _late_settlement),)
+    ),
     "payout_paid_in_full": World(_paid_in_full),
     "payout_partial_settlement": World(_partial_settlement),
     "payout_not_eligible": World(_not_eligible),

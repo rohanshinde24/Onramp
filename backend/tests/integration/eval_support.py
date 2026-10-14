@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from onramp.actions.gateway import ActionGateway
 from onramp.agent.model import ChatModel
-from onramp.entrypoints.case_eval import build_services
+from onramp.entrypoints.case_eval import build_services, scenario_writer
+from onramp.evaluation.faults import ScenarioFaults, no_faults
 from onramp.evaluation.reviewers import HonestReviewer, honest_reviewers
 from onramp.evaluation.runner import CaseEvaluationRunner
 from onramp.evaluation.scripted import KeywordPolicyRetriever, ScriptSet
@@ -31,15 +32,16 @@ def make_runner(
     writer: WriterFactory | None = None,
     gateway: type[ActionGateway] = ActionGateway,
     reviewers: Callable[[str], HonestReviewer] = honest_reviewers,
+    faults: Callable[[str], ScenarioFaults] = no_faults,
 ) -> CaseEvaluationRunner:
-    def services(clock: VirtualClock, model: ChatModel) -> CaseServices:
+    def services(clock: VirtualClock, model: ChatModel, injected: ScenarioFaults) -> CaseServices:
         return build_services(
             onramp,
             marketplace,
             KeywordPolicyRetriever(onramp),
             clock,
             model,
-            writer(marketplace, clock) if writer else None,
+            writer(marketplace, clock) if writer else scenario_writer(marketplace, clock, injected),
             gateway,
         )
 
@@ -51,4 +53,5 @@ def make_runner(
         CORPUS,
         scripts.model_for,
         reviewers=reviewers,
+        faults=faults,
     )

@@ -30,6 +30,7 @@ from onramp.checks.service import CheckService
 from onramp.config import AppEnv, get_settings
 from onramp.db import migrate
 from onramp.db.engine import make_engine, make_session_factory
+from onramp.evaluation.faults import ScenarioFaults, load_faults, no_faults
 from onramp.evaluation.report import LIMITATIONS, gate_failures, git_state, run_cases
 from onramp.evaluation.reviewers import honest_reviewers, load_reviewers
 from onramp.evaluation.runner import CaseEvaluationRunner
@@ -38,12 +39,22 @@ from onramp.evaluation.scripted import KeywordPolicyRetriever, load_scripts
 from onramp.evaluation.services import CaseServices, VirtualClock
 from onramp.evaluation.worlds import reset_databases
 from onramp.investigations.service import InvestigationService
+from onramp.marketplace.faults import FaultyMarketplaceWriter
 from onramp.marketplace.reader import SqlMarketplaceReader
 from onramp.marketplace.writer import MarketplaceWriter, SqlMarketplaceWriter
 from onramp.policy.corpus import load_corpus
 from onramp.policy.search import PolicyRetriever
 from onramp.proposals.service import ProposalService
 from onramp.workflows.activities import AgentActivities, WorkflowActivities
+
+
+def scenario_writer(
+    marketplace: sessionmaker[Session], clock: VirtualClock, faults: ScenarioFaults
+) -> MarketplaceWriter:
+    """The marketplace writer for one scenario, wrapped with its injected faults if any."""
+    writer = SqlMarketplaceWriter(marketplace, clock)
+    plan = faults.marketplace_plan()
+    return FaultyMarketplaceWriter(writer, plan) if plan else writer
 
 
 def build_services(
@@ -95,6 +106,9 @@ def main() -> None:
     parser.add_argument(
         "--reviewers", type=Path, help="scenario -> reviewer behavior; honest when omitted"
     )
+    parser.add_argument(
+        "--faults", type=Path, help="scenario -> injected faults; none when omitted"
+    )
     parser.add_argument("--min-outcome-accuracy", type=float, default=1.0)
     parser.add_argument(
         "--suite",
@@ -125,10 +139,18 @@ def main() -> None:
         onramp,
         marketplace,
         lambda: reset_databases(onramp_engine, marketplace_engine),
-        lambda clock, model: build_services(onramp, marketplace, retriever, clock, model),
+        lambda clock, model, faults: build_services(
+            onramp,
+            marketplace,
+            retriever,
+            clock,
+            model,
+            scenario_writer(marketplace, clock, faults),
+        ),
         corpus,
         scripts.model_for,
         reviewers=load_reviewers(args.reviewers) if args.reviewers else honest_reviewers,
+        faults=load_faults(args.faults) if args.faults else no_faults,
     )
 
     started = datetime.now(UTC)
@@ -145,6 +167,7 @@ def main() -> None:
                 ("truth", args.truth),
                 ("scripts", args.scripts),
                 ("reviewers", args.reviewers),
+                ("faults", args.faults),
             )
             if path is not None
         },

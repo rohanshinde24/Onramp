@@ -97,6 +97,12 @@ jobs:
           --scenarios ../eval/adversarial/scenarios.yaml --truth ../eval/adversarial/truth.yaml
           --scripts ../eval/adversarial/investigations.yaml
           --reviewers ../eval/adversarial/reviewers.yaml
+      - env:
+          AUTH_JWT_SECRET: ci-case-evaluation-signing-key-not-a-secret
+        run: >-
+          onramp-case-eval --suite fault-eval
+          --scenarios ../eval/faults/scenarios.yaml --truth ../eval/faults/truth.yaml
+          --scripts ../eval/faults/investigations.yaml --faults ../eval/faults/faults.yaml
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -104,6 +110,7 @@ jobs:
           path: |
             artifacts/case-eval/
             artifacts/adversarial-eval/
+            artifacts/fault-eval/
           if-no-files-found: ignore
 
   frontend:

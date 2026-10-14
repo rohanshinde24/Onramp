@@ -112,8 +112,12 @@ def test_settlement_wait_resumes_at_its_deadline(
 @pytest.mark.parametrize(
     ("scenario_id", "event", "resumed_to"),
     [
-        ("payout_settles_during_window", "event:payment.settled", "initial_checks"),
-        ("onboarding_tax_form_arrives_verified", "event:evidence.uploaded", "investigating"),
+        ("payout_settles_during_window", "event:payment.settled:applied", "initial_checks"),
+        (
+            "onboarding_tax_form_arrives_verified",
+            "event:evidence.uploaded:applied",
+            "investigating",
+        ),
     ],
 )
 def test_marketplace_event_during_a_wait_resumes_the_case(

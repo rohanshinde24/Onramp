@@ -1,0 +1,130 @@
+# Expected outcomes for the fault scenarios: the same answer the case gets with no fault,
+# reached through recovery, with no extra marketplace write.
+version: 1
+truths:
+- id: lost_response_retried_by_gateway
+  resolution_code: MISSING_PAYOUT
+  action_type: PAYOUT_ADJUSTMENT
+  amount_cents: 8400
+  required_citations: &id001
+  - payout_v12_section_3_1
+  - payout_v12_section_4_2
+  - payout_v12_section_4_3
+  - payout_v12_section_5_1
+  policy_id: payout
+  policy_version: 12
+  note: The payment lands but its response is lost once; the gateway retries with the same key.
+- id: lost_responses_outlast_gateway_retries
+  resolution_code: MISSING_PAYOUT
+  action_type: PAYOUT_ADJUSTMENT
+  amount_cents: 8400
+  required_citations: *id001
+  policy_id: payout
+  policy_version: 12
+  note: Every gateway attempt loses its response, so the activity fails and is retried; the stored
+    action resumes with the same key and pays once.
+- id: activation_times_out_before_write
+  resolution_code: REQUIREMENTS_MET
+  action_type: ACTIVATE_WORKER
+  required_citations: &id005
+  - onboarding_v4_section_2_1
+  - onboarding_v4_section_2_2
+  policy_id: onboarding
+  policy_version: 4
+  note: Activation never reaches the marketplace on the first activity attempt; the retry activates
+    once.
+- id: overturn_response_lost
+  resolution_code: REVIEW_OVERTURNED
+  action_type: OVERTURN_QUALITY_REVIEW
+  required_citations:
+  - quality_review_v6_section_2_1
+  - quality_review_v6_section_3_1
+  - quality_review_v6_section_4_1
+  - quality_review_v6_section_5_1
+  policy_id: quality_review
+  policy_version: 6
+  note: The overturn lands but every response in the first attempt is lost; the retry verifies it
+    once.
+- id: evidence_request_response_lost
+  should_escalate: true
+  required_citations: &id003
+  - onboarding_v4_section_2_1
+  - onboarding_v4_section_2_2
+  policy_id: onboarding
+  policy_version: 4
+  note: The document request lands but its response is lost; checks rerun and repeat it under the
+    same key.
+- id: provider_outage_then_recovers
+  resolution_code: UNDERPAID
+  action_type: PAYOUT_ADJUSTMENT
+  amount_cents: 1500
+  required_citations: &id002
+  - payout_v11_section_3_1
+  - payout_v11_section_4_2
+  policy_id: payout
+  policy_version: 11
+  note: The model provider fails twice; the investigation is retried with backoff and concludes.
+- id: crash_after_checks_commit
+  resolution_code: PAID_IN_FULL
+  required_citations: &id004
+  - payout_v12_section_3_1
+  - payout_v12_section_4_2
+  policy_id: payout
+  policy_version: 12
+  note: Checks commit their proposal and the process dies; the retry finds the work done.
+- id: crash_after_investigation_commit
+  resolution_code: UNDERPAID
+  action_type: PAYOUT_ADJUSTMENT
+  amount_cents: 1500
+  required_citations: *id002
+  policy_id: payout
+  policy_version: 11
+  note: The investigation commits its proposal and the process dies; the retry does not investigate
+    again.
+- id: crash_after_execution_commit
+  resolution_code: MISSING_PAYOUT
+  action_type: PAYOUT_ADJUSTMENT
+  amount_cents: 8400
+  required_citations: *id001
+  policy_id: payout
+  policy_version: 12
+  note: The gateway pays and records it, then the process dies; the retry does not pay again.
+- id: crash_after_settlement_resume
+  resolution_code: MISSING_PAYOUT
+  action_type: PAYOUT_ADJUSTMENT
+  amount_cents: 7200
+  required_citations:
+  - payout_v12_section_3_1
+  - payout_v12_section_4_2
+  - payout_v12_section_4_3
+  policy_id: payout
+  policy_version: 12
+  note: The settlement deadline returns the case to checks and the process dies; the retry is a no-op.
+- id: crash_after_evidence_timeout
+  should_escalate: true
+  required_citations: *id003
+  policy_id: onboarding
+  policy_version: 4
+  note: The evidence timeout escalates the case and the process dies; the retry changes nothing.
+- id: duplicate_settlement_event
+  resolution_code: PAID_IN_FULL
+  required_citations: *id004
+  policy_id: payout
+  policy_version: 12
+  note: The settlement event is delivered twice; the consumer applies it once.
+- id: duplicate_evidence_upload
+  resolution_code: REQUIREMENTS_MET
+  action_type: ACTIVATE_WORKER
+  required_citations: *id005
+  policy_id: onboarding
+  policy_version: 4
+  note: The upload event is delivered twice; the case resumes once and the worker is activated once.
+- id: late_settlement_after_resolution
+  resolution_code: MISSING_PAYOUT
+  action_type: PAYOUT_ADJUSTMENT
+  amount_cents: 8400
+  required_citations: *id001
+  policy_id: payout
+  policy_version: 12
+  note: The bank settles the original payment weeks after the adjustment. The resolved case must not
+    reopen or move.

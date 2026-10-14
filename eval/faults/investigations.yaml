@@ -1,0 +1,67 @@
+# Reference investigations reused from eval/cases for the fault scenarios that need the model.
+version: 1
+model: reference
+investigations:
+  provider_outage_then_recovers: &id001
+  - - tool: get_case
+  - - tool: get_submission
+    - tool: get_quality_reviews
+    - tool: get_payments
+  - - tool: get_payment_events
+      args:
+        payment_id: pay_107
+  - - tool: get_policy_passage
+      args:
+        passage_id: payout_v11_section_3_1
+  - - tool: submit_conclusion
+      args:
+        decision: resolve
+        resolution_code: UNDERPAID
+        confidence: 0.8
+        reason_codes:
+        - PARTIAL_SETTLEMENT
+        citations:
+        - payout_v11_section_3_1
+        evidence_refs:
+        - submission:s_107
+        - task:t_107
+        - payment:pay_107
+        - payment_event:pay_107_auth
+        - payment_event:pay_107_settled
+        proposed_action:
+          action_type: PAYOUT_ADJUSTMENT
+          amount_cents: 1500
+          currency: USD
+        rationale: The task listed 6000 cents and 4500 settled. Section 3.1 makes the task payout
+          the amount owed, and the settlement window closed in June, so 1500 is still owed.
+  crash_after_investigation_commit: *id001
+  duplicate_evidence_upload:
+  - - tool: get_case
+  - - tool: get_worker
+    - tool: get_verifications
+    - tool: get_documents
+  - - tool: get_policy_passage
+      args:
+        passage_id: onboarding_v4_section_2_1
+    - tool: get_policy_passage
+      args:
+        passage_id: onboarding_v4_section_2_2
+  - - tool: submit_conclusion
+      args:
+        decision: resolve
+        resolution_code: REQUIREMENTS_MET
+        confidence: 0.9
+        reason_codes:
+        - REQUIREMENTS_MET
+        citations:
+        - onboarding_v4_section_2_1
+        - onboarding_v4_section_2_2
+        evidence_refs:
+        - worker:w_cho
+        - verification:v_w_cho_identity
+        - verification:v_w_cho_skills_assessment
+        - verification:v_w_cho_tax_form
+        proposed_action:
+          action_type: ACTIVATE_WORKER
+        rationale: Identity, skills assessment and the tax form section 2.2 requires for US workers
+          have all passed, so section 2.1 activates the worker.

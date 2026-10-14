@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from onramp.actions.gateway import ActionGateway
 from onramp.agent.model import ChatModel
@@ -11,6 +11,9 @@ from onramp.cases.evidence_consumer import CaseEvidenceHandler
 from onramp.cases.service import CaseService
 from onramp.proposals.service import ProposalService
 from onramp.workflows.activities import AgentActivities, WorkflowActivities
+
+if TYPE_CHECKING:
+    from onramp.evaluation.faults import ScenarioFaults
 
 # Every step happens one second after the previous one, so records written by successive
 # steps never share a timestamp.
@@ -45,4 +48,6 @@ class CaseServices:
 
 
 class ServiceFactory(Protocol):
-    def __call__(self, clock: VirtualClock, model: ChatModel) -> CaseServices: ...
+    def __call__(
+        self, clock: VirtualClock, model: ChatModel, faults: "ScenarioFaults", /
+    ) -> CaseServices: ...
