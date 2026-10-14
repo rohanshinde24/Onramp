@@ -97,6 +97,7 @@ def run_cases(
     }
     _write_json(out / "summary.json", summary)
     _write_json(out / "manifest.json", {**manifest, "finished_at": datetime.now(UTC).isoformat()})
+    _write_parquet(out)
     return RunOutcome(tuple(runs), tuple(grades), summary)
 
 
@@ -164,3 +165,12 @@ def _observation(observation: CaseObservation) -> dict[str, Any]:
 
 def _write_json(path: Path, data: dict[str, Any]) -> None:
     path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+
+
+def _write_parquet(out: Path) -> None:
+    """Parquet beside the JSONL when DuckDB is installed (the ``eval`` extra)."""
+    try:
+        from onramp.evaluation.compare import write_parquet
+    except ImportError:
+        return
+    write_parquet(out)

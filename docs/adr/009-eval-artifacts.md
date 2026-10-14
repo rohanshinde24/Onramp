@@ -41,8 +41,10 @@ that do not change the decision:
 
 * Runs are grouped by suite, `artifacts/case-eval/<run_id>/` and
   `artifacts/retrieval/<run_id>/`, rather than one shared `artifacts/runs/`.
-* `results.parquet` is not written yet. It arrives with DuckDB in Phase 16; until then JSONL
-  is the only record, and DuckDB can read it directly.
+* `results.parquet` is written by DuckDB at the end of each run when the `eval` extra is
+  installed. `make compare` (`onramp-case-compare`) queries the JSONL with DuckDB, pairs two
+  runs by scenario, and fails on a regression; `make baseline` copies a finished run to
+  `eval/baselines/<suite>/<name>/`.
 
 The case-evaluation run statuses are `success`, `app_failure` and `harness_error`.
 `injected_fault` arrives with fault injection in Phase 15.

@@ -40,6 +40,7 @@ onramp-load-policies = "onramp.entrypoints.load_policies:main"
 onramp-policy-indexer = "onramp.entrypoints.policy_indexer:main"
 onramp-retrieval-eval = "onramp.entrypoints.retrieval_eval:main"
 onramp-case-eval = "onramp.entrypoints.case_eval:main"
+onramp-case-compare = "onramp.entrypoints.case_compare:main"
 onramp-workflow-worker = "onramp.entrypoints.workflow_worker:main"
 onramp-agent-worker = "onramp.entrypoints.agent_worker:main"
 onramp-case-signal-consumer = "onramp.entrypoints.case_signal_consumer:main"
@@ -52,6 +53,10 @@ embeddings = [
 # Anthropic provider for the investigator. Live calls need credentials and cost money.
 anthropic = [
     "anthropic>=1.13,<2",
+]
+# Offline analytics over evaluation artifacts (ADR-009): Parquet output and run comparisons.
+eval = [
+    "duckdb>=1.5.5,<1.6",
 ]
 dev = [
     "pytest>=9.1,<10",

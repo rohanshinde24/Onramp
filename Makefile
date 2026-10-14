@@ -1,11 +1,11 @@
 BACKEND := backend
 PY := $(BACKEND)/.venv/bin
 
-.PHONY: install lint format typecheck test test-integration test-kafka test-search check up down api-image migrate seed dlq-replay load-policies retrieval-eval case-eval adversarial-eval fault-eval
+.PHONY: install lint format typecheck test test-integration test-kafka test-search check up down api-image migrate seed dlq-replay load-policies retrieval-eval case-eval adversarial-eval fault-eval compare baseline
 
 install:
 	python3.13 -m venv $(BACKEND)/.venv
-	$(PY)/pip install -e '$(BACKEND)[dev,embeddings,anthropic]'
+	$(PY)/pip install -e '$(BACKEND)[dev,embeddings,anthropic,eval]'
 
 lint:
 	cd $(BACKEND) && .venv/bin/ruff check . && .venv/bin/ruff format --check . && .venv/bin/lint-imports
@@ -72,3 +72,13 @@ fault-eval:
 	$(PY)/onramp-case-eval --suite fault-eval --scenarios eval/faults/scenarios.yaml \
 		--truth eval/faults/truth.yaml --scripts eval/faults/investigations.yaml \
 		--faults eval/faults/faults.yaml
+
+# Compare two evaluation runs, or a run against a stored baseline; fails on a regression.
+# make compare BASE=eval/baselines/case-eval/<name> CANDIDATE=artifacts/case-eval/<run_id>
+compare:
+	$(PY)/onramp-case-compare $(BASE) $(CANDIDATE) $(ARGS)
+
+# Store a run as a baseline that later runs are compared against.
+# make baseline RUN=artifacts/case-eval/<run_id> NAME=<name>
+baseline:
+	$(PY)/onramp-case-compare --store-baseline $(RUN) $(NAME)
