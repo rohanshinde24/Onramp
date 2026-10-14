@@ -60,3 +60,6 @@ faults:
   duplicate_evidence_upload:
   - kind: duplicate_events
   late_settlement_after_resolution: []
+  search_outage_then_recovers:
+  - kind: search_outage
+    failures: 2

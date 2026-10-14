@@ -128,3 +128,12 @@ truths:
   policy_version: 12
   note: The bank settles the original payment weeks after the adjustment. The resolved case must not
     reopen or move.
+- id: search_outage_then_recovers
+  resolution_code: UNDERPAID
+  action_type: PAYOUT_ADJUSTMENT
+  amount_cents: 1500
+  required_citations: *id002
+  policy_id: payout
+  policy_version: 11
+  note: Policy search fails twice mid-investigation; the investigation is retried from the start with
+    backoff and concludes.

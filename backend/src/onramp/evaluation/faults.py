@@ -8,7 +8,9 @@ A fault suite names, for each scenario, what goes wrong while its case runs:
 * ``crash_after``: a workflow activity commits its work and then the process dies before
   reporting success, a number of times,
 * ``duplicate_events``: every marketplace event is delivered twice, as at-least-once delivery
-  allows.
+  allows,
+* ``search_outage``: policy search fails a number of times, as when the search cluster is
+  down.
 
 The runner retries failed activities the way the Temporal workflow's retry policies do, so a
 scenario shows whether the application recovers, not merely whether it fails.
@@ -16,7 +18,7 @@ scenario shows whether the application recovers, not merely whether it fails.
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -32,6 +34,7 @@ from onramp.agent.model import (
     ToolDefinition,
 )
 from onramp.marketplace.faults import Fault, FaultPlan, OutcomeUnknownError
+from onramp.policy.search import PolicyRetriever, RetrievedPassage
 from onramp.workflows.activities import InvestigationUnavailableError
 
 
@@ -39,11 +42,16 @@ class InjectedCrashError(RuntimeError):
     """The process died after an activity's work committed, before it reported success."""
 
 
+class InjectedSearchOutageError(ConnectionError):
+    """Policy search could not be reached."""
+
+
 # Errors the harness itself causes. A run that ends on one of these, after the retries a
 # workflow would make, is an injected fault rather than an application failure.
 INJECTED_ERRORS: tuple[type[Exception], ...] = (
     OutcomeUnknownError,
     InjectedCrashError,
+    InjectedSearchOutageError,
     InvestigationUnavailableError,
 )
 
@@ -80,8 +88,14 @@ class DuplicateEvents(_Spec):
     kind: Literal["duplicate_events"]
 
 
+class SearchOutage(_Spec):
+    kind: Literal["search_outage"]
+    failures: int = Field(ge=1)
+
+
 FaultSpec = Annotated[
-    MarketplaceFault | ModelOutage | CrashAfter | DuplicateEvents, Field(discriminator="kind")
+    MarketplaceFault | ModelOutage | CrashAfter | DuplicateEvents | SearchOutage,
+    Field(discriminator="kind"),
 ]
 
 
@@ -121,6 +135,10 @@ class ScenarioFaults:
     def wrap_model(self, model: ChatModel) -> ChatModel:
         failures = sum(s.failures for s in self.specs if isinstance(s, ModelOutage))
         return FlakyModel(model, failures) if failures else model
+
+    def wrap_retriever(self, retriever: PolicyRetriever) -> PolicyRetriever:
+        failures = sum(s.failures for s in self.specs if isinstance(s, SearchOutage))
+        return FlakyRetriever(retriever, failures) if failures else retriever
 
     def crash_after(self, activity: str) -> bool:
         """True, once per configured crash, right after ``activity`` succeeded."""
@@ -164,6 +182,20 @@ class FlakyModel:
         return self._inner.respond(system, transcript, tools)
 
 
+class FlakyRetriever:
+    """Fails like an unreachable search cluster a fixed number of times, then delegates."""
+
+    def __init__(self, inner: PolicyRetriever, failures: int) -> None:
+        self._inner = inner
+        self._failures = failures
+
+    def search(self, domain: str, at: datetime, query: str, k: int = 5) -> list[RetrievedPassage]:
+        if self._failures:
+            self._failures -= 1
+            raise InjectedSearchOutageError("injected search outage")
+        return self._inner.search(domain, at, query, k)
+
+
 @dataclass(frozen=True)
 class Retry:
     """A Temporal retry policy, applied by the runner on a virtual clock."""
@@ -200,3 +232,5 @@ def _label(spec: FaultSpec) -> str:
             return f"crash_after:{spec.activity}x{spec.times}"
         case DuplicateEvents():
             return "duplicate_events"
+        case SearchOutage():
+            return f"search_outage:{spec.failures}"

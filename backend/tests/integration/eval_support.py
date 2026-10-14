@@ -38,7 +38,7 @@ def make_runner(
         return build_services(
             onramp,
             marketplace,
-            KeywordPolicyRetriever(onramp),
+            injected.wrap_retriever(KeywordPolicyRetriever(onramp)),
             clock,
             model,
             writer(marketplace, clock) if writer else scenario_writer(marketplace, clock, injected),

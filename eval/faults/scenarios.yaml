@@ -73,3 +73,8 @@ scenarios:
   world_fixture: payout_settlement_failed_then_late_settlement
   subject_id: s_100
   report: My payment for this task has a problem.
+- id: search_outage_then_recovers
+  case_type: payout
+  world_fixture: payout_partial_settlement_v11
+  subject_id: s_107
+  report: My payment for this task has a problem.

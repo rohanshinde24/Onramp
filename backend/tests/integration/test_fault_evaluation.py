@@ -36,6 +36,7 @@ EVIDENCE = {
     "duplicate_settlement_event": "event:payment.settled:duplicate",
     "duplicate_evidence_upload": "event:evidence.uploaded:duplicate",
     "late_settlement_after_resolution": "event:payment.settled:applied",
+    "search_outage_then_recovers": "retry:run_investigation:InjectedSearchOutageError",
 }
 
 

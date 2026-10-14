@@ -3,17 +3,22 @@ version: 1
 model: reference
 investigations:
   provider_outage_then_recovers: &id001
-  - - tool: get_case
-  - - tool: get_submission
+  - &id002
+    - tool: get_case
+  - &id003
+    - tool: get_submission
     - tool: get_quality_reviews
     - tool: get_payments
-  - - tool: get_payment_events
+  - &id004
+    - tool: get_payment_events
       args:
         payment_id: pay_107
-  - - tool: get_policy_passage
+  - &id005
+    - tool: get_policy_passage
       args:
         passage_id: payout_v11_section_3_1
-  - - tool: submit_conclusion
+  - &id006
+    - tool: submit_conclusion
       args:
         decision: resolve
         resolution_code: UNDERPAID
@@ -65,3 +70,12 @@ investigations:
           action_type: ACTIVATE_WORKER
         rationale: Identity, skills assessment and the tax form section 2.2 requires for US workers
           have all passed, so section 2.1 activates the worker.
+  search_outage_then_recovers:
+  - *id002
+  - - tool: search_policy
+      args:
+        query: payment settled for less than the task payout
+  - *id003
+  - *id004
+  - *id005
+  - *id006

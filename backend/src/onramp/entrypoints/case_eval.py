@@ -142,7 +142,7 @@ def main() -> None:
         lambda clock, model, faults: build_services(
             onramp,
             marketplace,
-            retriever,
+            faults.wrap_retriever(retriever),
             clock,
             model,
             scenario_writer(marketplace, clock, faults),
