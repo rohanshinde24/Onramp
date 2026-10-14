@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
@@ -82,3 +83,30 @@ def test_batch_runs_are_refused_without_a_live_model(monkeypatch: pytest.MonkeyP
 
     with pytest.raises(SystemExit, match="--batch records live answers"):
         case_eval.main()
+
+
+def test_a_live_model_option_selects_the_recorded_live_model(tmp_path: Path) -> None:
+    from argparse import Namespace
+
+    from pydantic import SecretStr
+
+    from onramp.evaluation.recordings import RecordedModel
+    from onramp.evaluation.scripted import ScriptSet
+
+    args = Namespace(
+        model="claude-haiku-5-5",
+        effort="low",
+        max_cost=Decimal("0.05"),
+        batch=False,
+        prompt="investigator-v1",
+        repeat=0,
+        recordings=tmp_path,
+    )
+    scripts = ScriptSet(version=1, model="reference", investigations={})
+
+    models, name = case_eval.select_models(args, SecretStr("not-a-real-key"), scripts)
+
+    assert name == "claude-haiku-5-5@low"
+    assert isinstance(models("any_scenario"), RecordedModel)
+    args.model = None
+    assert case_eval.select_models(args, None, scripts)[1] == "scripted:reference:v1"

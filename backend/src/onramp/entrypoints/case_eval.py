@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
+from pydantic import SecretStr
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
@@ -40,7 +41,7 @@ from onramp.evaluation.report import LIMITATIONS, gate_failures, git_state, run_
 from onramp.evaluation.reviewers import honest_reviewers, load_reviewers
 from onramp.evaluation.runner import CaseEvaluationRunner
 from onramp.evaluation.scenarios import ScenarioSet, load_scenarios, validate_truth
-from onramp.evaluation.scripted import KeywordPolicyRetriever, load_scripts
+from onramp.evaluation.scripted import KeywordPolicyRetriever, ScriptSet, load_scripts
 from onramp.evaluation.services import CaseServices, VirtualClock
 from onramp.evaluation.spend import PRICES, SpendCapReachedError, SpendMeter
 from onramp.evaluation.worlds import reset_databases
@@ -127,6 +128,21 @@ def _live_models(args: argparse.Namespace, api_key: str) -> tuple[Callable[[str]
         return RecordedModel(key, store, provider)
 
     return model_for, name
+
+
+def select_models(
+    args: argparse.Namespace, api_key: SecretStr | None, scripts: ScriptSet
+) -> tuple[Callable[[str], ChatModel], str]:
+    """The scripted investigators, or with ``--model`` the live model behind recordings."""
+    if not args.model:
+        if args.batch:
+            sys.exit("--batch records live answers: it needs --model and --max-cost")
+        return scripts.model_for, scripts.model_name
+    if args.max_cost is None or args.max_cost <= 0:
+        sys.exit("--model costs money: set --max-cost to a positive dollar amount")
+    if api_key is None:
+        sys.exit("ANTHROPIC_API_KEY is not set in the environment or .env")
+    return _live_models(args, api_key.get_secret_value())
 
 
 def _record_in_batches(
@@ -222,16 +238,7 @@ def main() -> None:
     corpus = load_corpus(ROOT / "policies")
     validate_truth(truth, corpus)
     scripts = load_scripts(args.scripts)
-    models: Callable[[str], ChatModel] = scripts.model_for
-    model_name = scripts.model_name
-    if args.model:
-        if args.max_cost is None or args.max_cost <= 0:
-            sys.exit("--model costs money: set --max-cost to a positive dollar amount")
-        if settings.anthropic_api_key is None:
-            sys.exit("ANTHROPIC_API_KEY is not set in the environment or .env")
-    elif args.batch:
-        sys.exit("--batch records live answers: it needs --model and --max-cost")
-        models, model_name = _live_models(args, settings.anthropic_api_key.get_secret_value())
+    models, model_name = select_models(args, settings.anthropic_api_key, scripts)
     meter = SpendMeter(cap_usd=args.max_cost)
 
     onramp_url = _recreate(str(settings.database_url))
