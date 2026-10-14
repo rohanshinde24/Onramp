@@ -68,10 +68,19 @@ class ToolSpec:
     args: type[BaseModel]
 
 
+# Fields the investigator never needs. The tenant is the case's; the ref already names the
+# record; and identity always comes from the case, so worker names and emails would only invite
+# namesake mistakes and send personal data to the model provider for nothing.
+_ALWAYS_OMITTED = frozenset({"tenant_id", "id"})
+_OMITTED_BY_KIND: dict[str, frozenset[str]] = {
+    "worker": frozenset({"full_name", "email"}),
+    "quality_review": frozenset({"reviewer_id"}),
+}
+
+
 def _record(record: Record) -> dict[str, Any]:
-    data = record.model_dump(mode="json")
-    data["ref"] = record.ref
-    return data
+    omitted = _ALWAYS_OMITTED | _OMITTED_BY_KIND.get(record.kind, frozenset())
+    return {"ref": record.ref, **record.model_dump(mode="json", exclude=set(omitted))}
 
 
 def _untrusted(text: str) -> dict[str, str]:

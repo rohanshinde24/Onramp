@@ -54,3 +54,16 @@ def test_policy_tools_stay_within_the_version_in_force(world: World) -> None:
     assert all(p.startswith("payout_v12_") for p in search.passages)
     assert current.passages == {"payout_v12_section_4_3"}
     assert stale.error == "passage not found in the policy in force"
+
+
+def test_records_reach_the_model_without_tenant_names_or_emails(world: World) -> None:
+    onboarding = _toolbox(world, CaseType.ONBOARDING, subject="w_new", worker="w_new")
+
+    worker = onboarding.call("get_worker", {}).content["worker"]
+    payment = _toolbox(world).call("get_payments", {}).content["payments"][0]
+
+    assert worker["ref"] == "worker:w_new"
+    assert {"full_name", "email", "tenant_id", "id"}.isdisjoint(worker)
+    assert worker["status"] == "pending_onboarding"
+    assert {"tenant_id", "id"}.isdisjoint(payment)
+    assert payment["amount_cents"] == 8400

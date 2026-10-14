@@ -159,7 +159,11 @@ def investigate(
             observations.passage_ids |= result.passages
             body = {"error": result.error} if result.error else result.content
             outputs.append(
-                ToolOutput(c.id, json.dumps(body, default=str), is_error=result.error is not None)
+                ToolOutput(
+                    c.id,
+                    json.dumps(body, default=str, separators=(",", ":")),
+                    is_error=result.error is not None,
+                )
             )
             records.append(
                 {

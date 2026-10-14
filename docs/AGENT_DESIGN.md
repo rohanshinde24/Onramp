@@ -42,6 +42,9 @@ transaction, and the result is applied only if the case has not changed meanwhil
   or another tenant's record reads as not found.
 * Policy tools return only the versions in force at the incident time.
 * Worker reports and documents are returned under `untrusted_text`.
+* Records reach the model without their tenant, bare ID, worker name, worker email or reviewer
+  ID. Each record is named by its `ref`; identity comes from the case, so names would only invite
+  namesake mistakes and send personal data to the provider.
 * No write tool exists. An import contract forbids the agent package from importing the
   actions package, the marketplace writer, marketplace activity or approvals.
 
