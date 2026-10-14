@@ -1,5 +1,6 @@
 """Outbox publisher semantics, including both crash windows from ADR-005."""
 
+import sys
 import threading
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
@@ -22,7 +23,14 @@ from onramp.events.publisher import (
 )
 
 # Rows become due at the database's now(), so the publisher clock runs just after real time.
+# It is reset before every test: fixed once at collection, it fell behind the database clock
+# whenever the suite took longer than a minute to reach these tests.
 T0 = datetime.now(UTC) + timedelta(minutes=1)
+
+
+@pytest.fixture(autouse=True)
+def _publisher_clock_just_after_now(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys.modules[__name__], "T0", datetime.now(UTC) + timedelta(minutes=1))
 
 
 class RecordingSink:
