@@ -471,3 +471,13 @@ WORLDS: dict[str, World] = {
         opened_at=datetime(2026, 10, 22, 12, tzinfo=UTC),
     ),
 }
+
+
+def _judgment_worlds() -> dict[str, World]:
+    from onramp.evaluation.judgment import worlds
+
+    return worlds()
+
+
+# The judgment suite's worlds are generated from its parameter tables.
+WORLDS.update(_judgment_worlds())

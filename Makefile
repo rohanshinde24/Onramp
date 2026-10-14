@@ -1,7 +1,7 @@
 BACKEND := backend
 PY := $(BACKEND)/.venv/bin
 
-.PHONY: install lint format typecheck test test-integration test-kafka test-search check up down api-image migrate seed dlq-replay load-policies retrieval-eval case-eval adversarial-eval fault-eval compare baseline
+.PHONY: install lint format typecheck test test-integration test-kafka test-search check up down api-image migrate seed dlq-replay load-policies retrieval-eval case-eval adversarial-eval fault-eval compare baseline judgment-eval judgment-dataset
 
 install:
 	python3.13 -m venv $(BACKEND)/.venv
@@ -82,3 +82,18 @@ compare:
 # make baseline RUN=artifacts/case-eval/<run_id> NAME=<name>
 baseline:
 	$(PY)/onramp-case-compare --store-baseline $(RUN) $(NAME)
+
+# The judgment suite needs a live model and always a spending cap; every case reaches the
+# investigator, so accuracy below 1.0 is expected and does not fail the run.
+# make judgment-eval MODEL=claude-haiku-5-5 MAX_COST=1.00 [EFFORT=medium] [PROMPT=investigator-v1] [BATCH=--batch]
+judgment-eval:
+	$(PY)/onramp-case-eval --suite judgment-eval --scenarios eval/judgment/scenarios.yaml \
+		--truth eval/judgment/truth.yaml --model $(MODEL) --max-cost $(MAX_COST) \
+		--effort $(or $(EFFORT),medium) --prompt $(or $(PROMPT),investigator-v1) \
+		--min-outcome-accuracy 0 $(BATCH)
+
+# Regenerate the judgment suite's YAML from its label rules.
+judgment-dataset:
+	$(PY)/python -c "from pathlib import Path; from onramp.evaluation.judgment import render; \
+	s, t = render(); Path('eval/judgment/scenarios.yaml').write_text(s); \
+	Path('eval/judgment/truth.yaml').write_text(t)"
