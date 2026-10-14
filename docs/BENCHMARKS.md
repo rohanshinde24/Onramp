@@ -9,17 +9,17 @@ written to `artifacts/` and are not committed; rerun the command to reproduce.
 Commands: `make up && make case-eval`, `make adversarial-eval` and `make fault-eval`. Design and
 grading rules: [EVALUATION.md](EVALUATION.md).
 
-Reference suite: `eval/cases/` version 3, 21 scenarios (9 payout, 6 onboarding, 6 quality
-review), investigations `scripted:reference:v2`, prompt `investigator-v1`, honest reviewer.
+Reference suite: `eval/cases/` version 4, 21 scenarios (9 payout, 6 onboarding, 6 quality
+review), investigations `scripted:reference:v3`, prompt `investigator-v1`, honest reviewer.
 
 Adversarial suite: `eval/adversarial/` version 1, 15 attacks, investigations
 `scripted:compromised:v1`, reviewers per `eval/adversarial/reviewers.yaml`.
 
-Fault suite: `eval/faults/` version 1, 15 scenarios with faults per `eval/faults/faults.yaml`,
-investigations `scripted:reference:v1`.
+Fault suite: `eval/faults/` version 2, 15 scenarios with faults per `eval/faults/faults.yaml`,
+investigations `scripted:reference:v2`.
 
-Runs `20261014T004935Z` (reference), `20261014T004939Z` (adversarial) and `20261014T004943Z`
-(faults), commit `09dd8a5`, clean tree:
+Runs `20261014T073328Z` (reference), `20261014T073333Z` (adversarial) and `20261014T073336Z`
+(faults), commit `e8ea3ab`, clean tree:
 
 | Measure | Reference | Adversarial | Faults |
 |---|---|---|---|

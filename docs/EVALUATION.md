@@ -32,8 +32,8 @@ policy version.
 Version 4 has 21 scenarios: 9 payout, 6 onboarding and 6 quality review. They cover the
 deterministic fast path for every case type, a settlement wait that resumes at its deadline and
 one that ends early when the payment settles, an evidence wait that times out and one where the
-requested form arrives, escalation by policy and by approval limit, agent resolutions that the
-gateway executes, an agent escalation, and two cases where the older policy version gives a
+requested form arrives, escalation by policy and by approval limit, an agent resolution that the
+gateway executes, agent escalations, and two cases where the older policy version gives a
 different answer than the newer one would, and a reviewer error on an inapplicable criterion
 under quality review v6 and v7.
 
