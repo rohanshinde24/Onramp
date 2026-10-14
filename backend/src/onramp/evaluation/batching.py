@@ -14,11 +14,15 @@ import itertools
 import threading
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Protocol
 
 from onramp.agent.anthropic_model import AnthropicChatModel, from_wire
+from onramp.agent.graph import DEFAULT_BUDGET, investigate
 from onramp.agent.model import Message, ModelResponse, ModelUnavailableError, ToolDefinition
+from onramp.evaluation.recordings import RecordedModel, RecordingKey, RecordingStore
+from onramp.evaluation.snapshots import InvestigationSnapshot
+from onramp.evaluation.spend import MeteredModel, SpendCapReachedError, SpendMeter
 
 
 @dataclass(frozen=True)
@@ -161,3 +165,66 @@ class BatchedModel:
         self, system: str, transcript: Sequence[Message], tools: Sequence[ToolDefinition]
     ) -> ModelResponse:
         return self.coordinator.call(self.inner.request(system, transcript, tools))
+
+
+@dataclass(frozen=True)
+class BatchRecordingResult:
+    investigations: int
+    batches: int
+    requests: int
+    # Scenario -> why its investigation could not be recorded in full. Those turns are made
+    # live, and metered, when the run replays.
+    failures: dict[str, str]
+
+
+def record_investigations(
+    snapshots: Sequence[InvestigationSnapshot],
+    *,
+    model: AnthropicChatModel,
+    prompt_version: str,
+    store: RecordingStore,
+    meter: SpendMeter,
+    submitter: BatchSubmitter,
+    repeat: int = 0,
+    chunk_size: int = 50,
+) -> BatchRecordingResult:
+    """Record every snapshot's investigation, sending the model calls as batches.
+
+    Snapshots run in chunks, and the spending cap is checked before each chunk, so a run
+    overshoots its cap by at most one turn of one chunk.
+    """
+    coordinator = BatchCoordinator(submitter)
+    # Batch latency says nothing about the investigation, so the wall-clock limit is lifted;
+    # every other budget limit stays exactly as it is in production.
+    budget = replace(DEFAULT_BUDGET, timeout_s=float(24 * 60 * 60))
+    failures: dict[str, str] = {}
+
+    def job(snapshot: InvestigationSnapshot) -> Callable[[], None]:
+        def run() -> None:
+            recorded = RecordedModel(
+                RecordingKey(model.name, prompt_version, snapshot.scenario_id, repeat),
+                store,
+                lambda: coordinator.model(model),
+                batch=True,
+            )
+            result = investigate(
+                MeteredModel(recorded, meter, batch=True),
+                snapshot.toolbox(),
+                snapshot.scope.case_type,
+                budget=budget,
+                prompt_version=prompt_version,
+            )
+            if result.status == "model_error":
+                failures[snapshot.scenario_id] = "; ".join(result.problems)
+
+        return run
+
+    for start in range(0, len(snapshots), chunk_size):
+        meter.check()
+        chunk = snapshots[start : start + chunk_size]
+        for snapshot, error in zip(chunk, coordinator.run([job(s) for s in chunk]), strict=True):
+            if error is not None:
+                failures[snapshot.scenario_id] = f"{type(error).__name__}: {error}"
+                if isinstance(error, SpendCapReachedError):
+                    raise error
+    return BatchRecordingResult(len(snapshots), coordinator.batches, coordinator.requests, failures)

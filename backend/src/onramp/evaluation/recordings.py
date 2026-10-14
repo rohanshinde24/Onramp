@@ -208,5 +208,7 @@ def _serializable(raw: Any) -> list[dict[str, Any]] | None:
         block.model_dump(mode="json", exclude_none=True)
         if hasattr(block, "model_dump")
         else dict(block)
+        if isinstance(block, dict)
+        else dict(vars(block))
         for block in raw
     ]

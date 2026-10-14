@@ -30,7 +30,8 @@ from enum import StrEnum
 from sqlalchemy.orm import Session, sessionmaker
 
 from onramp.actions.gateway import ActionExecutionFailedError, GatewayRejectedError
-from onramp.agent.model import ChatModel
+from onramp.agent.model import ChatModel, ScriptedModel
+from onramp.cases.queries import get_case
 from onramp.cases.service import IntakeError, IntakeRequest
 from onramp.cases.state import CaseState
 from onramp.evaluation.case_grading import CaseObservation
@@ -45,13 +46,17 @@ from onramp.evaluation.observations import observe_case
 from onramp.evaluation.reviewers import HonestReviewer, ReviewContext, honest_reviewers
 from onramp.evaluation.safety import safety_violations
 from onramp.evaluation.scenarios import ScenarioInput
+from onramp.evaluation.scripted import passages_in_force
 from onramp.evaluation.services import CaseServices, ServiceFactory, VirtualClock
+from onramp.evaluation.snapshots import InvestigationSnapshot, take_snapshot
 from onramp.evaluation.spend import MeteredModel, SpendCapReachedError, SpendMeter
 from onramp.evaluation.worlds import SERVICE, TENANT, WorldEvent, build_world, happen
 from onramp.events.consumer import ConsumerRunner, Outcome, RawMessage
 from onramp.events.contracts import contract_for
 from onramp.identity.principal import Principal
 from onramp.identity.roles import Role
+from onramp.investigations.service import case_scope
+from onramp.marketplace.reader import SqlMarketplaceReader
 from onramp.policy.corpus import PolicyDocument
 from onramp.workflows.case import ACTIVITY_RETRY, INVESTIGATION_RETRY
 from onramp.workflows.contracts import CaseSnapshot, CaseWorkflowInput
@@ -102,6 +107,8 @@ class _Case:
     clock: VirtualClock
     events: list[WorldEvent]
     faults: ScenarioFaults
+    # Stop when the case first needs the investigator, to snapshot it for batching.
+    stop_at_investigation: bool = False
 
     @property
     def steps(self) -> list[str]:
@@ -190,6 +197,34 @@ class CaseEvaluationRunner:
             run.error = f"observe: {type(exc).__name__}: {exc}"
         return _finish(run, started)
 
+    def snapshot(self, scenario: ScenarioInput) -> InvestigationSnapshot | None:
+        """Drive the scenario until it first needs the investigator and capture what the
+        investigator's tools can read. ``None`` when the case never gets there."""
+        self._reset()
+        world = build_world(scenario.world_fixture, self._onramp, self._marketplace, self._corpus)
+        clock = VirtualClock(world.opened_at)
+        faults = self._faults(scenario.id)
+        services = self._services(clock, ScriptedModel([], name="scripted:snapshot"), faults)
+        try:
+            case_id = self._open(services, scenario)
+            case = _Case(
+                services,
+                self._reviewers(scenario.id),
+                ReviewContext(services, self._onramp, case_id, []),
+                clock,
+                sorted(world.events, key=lambda event: event.at),
+                faults,
+                stop_at_investigation=True,
+            )
+            if self._drive(case) != CaseState.INVESTIGATING:
+                return None
+        except IntakeError:
+            return None
+        with self._onramp() as session:
+            scope = case_scope(session, get_case(session, TENANT, case_id))
+            passages = passages_in_force(session, scope.case_type.value, scope.incident_at)
+        return take_snapshot(scenario.id, scope, SqlMarketplaceReader(self._marketplace), passages)
+
     def _open(self, services: CaseServices, scenario: ScenarioInput) -> str:
         result = services.cases.open_case(
             Principal(TENANT, SERVICE, Role.MARKETPLACE_SERVICE),
@@ -211,7 +246,9 @@ class CaseEvaluationRunner:
             snapshot = workflow.read_case(request)
             state = CaseState(snapshot.state)
             case.steps.append(state.value)
-            if state in _STOP_STATES:
+            if state in _STOP_STATES or (
+                case.stop_at_investigation and state is CaseState.INVESTIGATING
+            ):
                 return state.value
             match state:
                 case CaseState.CREATED | CaseState.INITIAL_CHECKS:

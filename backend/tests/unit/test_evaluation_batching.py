@@ -3,7 +3,7 @@ from typing import Any
 
 from onramp.agent.anthropic_model import AnthropicChatModel
 from onramp.agent.model import Message, ModelUnavailableError
-from onramp.evaluation.batching import BatchCoordinator, BatchOutcome
+from onramp.evaluation.batching import AnthropicBatchSubmitter, BatchCoordinator, BatchOutcome
 
 
 def _message(text: str) -> Any:
@@ -68,3 +68,40 @@ def test_a_failed_batch_fails_those_calls_as_an_unavailable_provider() -> None:
 
     assert isinstance(error, ModelUnavailableError)
     assert "batch endpoint down" in str(error)
+
+
+class _FakeBatchesApi:
+    def __init__(self) -> None:
+        self.polls = 0
+        self.created: list[dict[str, Any]] = []
+
+    def create(self, requests: list[dict[str, Any]]) -> Any:
+        self.created = requests
+        return SimpleNamespace(id="batch_1", processing_status="in_progress")
+
+    def retrieve(self, batch_id: str) -> Any:
+        self.polls += 1
+        return SimpleNamespace(id=batch_id, processing_status="ended")
+
+    def results(self, batch_id: str) -> list[Any]:
+        return [
+            SimpleNamespace(
+                custom_id="a",
+                result=SimpleNamespace(type="succeeded", message=_message("hi")),
+            ),
+            SimpleNamespace(custom_id="b", result=SimpleNamespace(type="expired")),
+        ]
+
+
+def test_the_submitter_polls_until_the_batch_ends_and_maps_results() -> None:
+    api = _FakeBatchesApi()
+    client = SimpleNamespace(messages=SimpleNamespace(batches=api))
+    submitter = AnthropicBatchSubmitter(client, sleep=lambda _: None)
+
+    outcomes = submitter.submit({"a": {"model": "m"}, "b": {"model": "m"}})
+
+    assert [r["custom_id"] for r in api.created] == ["a", "b"]
+    assert api.polls == 1
+    assert outcomes["a"].message is not None
+    assert outcomes["b"].error == "batch expired"
+    assert submitter.batch_ids == ["batch_1"]

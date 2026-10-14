@@ -69,7 +69,7 @@ class InvestigationService:
             case = get_case(session, tenant_id, case_id)
             if case.state != CaseState.INVESTIGATING:
                 raise NotInvestigatingError(f"case is {case.state}")
-            scope = _scope(session, case)
+            scope = case_scope(session, case)
             started_version = case.version
 
         # The model call happens outside any database transaction: it can take a minute.
@@ -155,7 +155,8 @@ class InvestigationService:
         )
 
 
-def _scope(session: Session, case: SupportCase) -> CaseScope:
+def case_scope(session: Session, case: SupportCase) -> CaseScope:
+    """The trusted facts an investigation of ``case`` is bound to."""
     latest_check = session.scalar(
         select(CheckRun)
         .filter_by(tenant_id=case.tenant_id, case_id=case.id)

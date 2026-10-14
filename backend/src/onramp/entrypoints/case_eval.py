@@ -33,15 +33,16 @@ from onramp.checks.service import CheckService
 from onramp.config import AppEnv, get_settings
 from onramp.db import migrate
 from onramp.db.engine import make_engine, make_session_factory
+from onramp.evaluation.batching import AnthropicBatchSubmitter, record_investigations
 from onramp.evaluation.faults import ScenarioFaults, load_faults, no_faults
 from onramp.evaluation.recordings import RecordedModel, RecordingKey, RecordingStore
 from onramp.evaluation.report import LIMITATIONS, gate_failures, git_state, run_cases
 from onramp.evaluation.reviewers import honest_reviewers, load_reviewers
 from onramp.evaluation.runner import CaseEvaluationRunner
-from onramp.evaluation.scenarios import load_scenarios, validate_truth
+from onramp.evaluation.scenarios import ScenarioSet, load_scenarios, validate_truth
 from onramp.evaluation.scripted import KeywordPolicyRetriever, load_scripts
 from onramp.evaluation.services import CaseServices, VirtualClock
-from onramp.evaluation.spend import PRICES, SpendMeter
+from onramp.evaluation.spend import PRICES, SpendCapReachedError, SpendMeter
 from onramp.evaluation.worlds import reset_databases
 from onramp.investigations.service import InvestigationService
 from onramp.marketplace.faults import FaultyMarketplaceWriter
@@ -128,6 +129,48 @@ def _live_models(args: argparse.Namespace, api_key: str) -> tuple[Callable[[str]
     return model_for, name
 
 
+def _record_in_batches(
+    args: argparse.Namespace,
+    api_key: str,
+    runner: CaseEvaluationRunner,
+    scenarios: ScenarioSet,
+    meter: SpendMeter,
+) -> dict[str, object]:
+    """Phase one of a batch run: snapshot each case at the investigator and record every
+    investigation through batches. The normal run that follows replays them."""
+    import anthropic  # optional dependency, needed only for live calls
+
+    client = anthropic.Anthropic(api_key=api_key, timeout=120.0)
+    model = AnthropicChatModel(client, model=args.model, effort=args.effort)
+    snapshots = [snap for s in scenarios.scenarios if (snap := runner.snapshot(s)) is not None]
+    print(f"batch: {len(snapshots)} of {len(scenarios.scenarios)} scenarios need the investigator")
+    submitter = AnthropicBatchSubmitter(client)
+    summary: dict[str, object] = {
+        "investigations": len(snapshots),
+        "batch_ids": submitter.batch_ids,
+    }
+    try:
+        result = record_investigations(
+            snapshots,
+            model=model,
+            prompt_version=args.prompt,
+            store=RecordingStore(args.recordings),
+            meter=meter,
+            submitter=submitter,
+            repeat=args.repeat,
+        )
+    except SpendCapReachedError as exc:
+        summary["stopped"] = str(exc)
+        return summary
+    summary |= {
+        "batches": result.batches,
+        "requests": result.requests,
+        "not_fully_recorded": result.failures,
+    }
+    print(f"batch: {result.requests} requests in {result.batches} batches")
+    return summary
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--scenarios", type=Path, default=CASES / "scenarios.yaml")
@@ -153,6 +196,12 @@ def main() -> None:
         help="recorded live answers; matching ones are replayed instead of paid for again",
     )
     parser.add_argument("--repeat", type=int, default=0, help="which repeat of a live run this is")
+    parser.add_argument(
+        "--batch",
+        action="store_true",
+        help="record investigations through the Message Batches API first (half price), then"
+        " replay them; needs --model",
+    )
     parser.add_argument(
         "--max-cost",
         type=Decimal,
@@ -180,6 +229,8 @@ def main() -> None:
             sys.exit("--model costs money: set --max-cost to a positive dollar amount")
         if settings.anthropic_api_key is None:
             sys.exit("ANTHROPIC_API_KEY is not set in the environment or .env")
+    elif args.batch:
+        sys.exit("--batch records live answers: it needs --model and --max-cost")
         models, model_name = _live_models(args, settings.anthropic_api_key.get_secret_value())
     meter = SpendMeter(cap_usd=args.max_cost)
 
@@ -246,6 +297,10 @@ def main() -> None:
         "reviewer": "per scenario" if args.reviewers else "honest: accepts and approves as shown",
         "limitations": list(LIMITATIONS),
     }
+    if args.batch and settings.anthropic_api_key is not None:
+        manifest["batch"] = _record_in_batches(
+            args, settings.anthropic_api_key.get_secret_value(), runner, scenarios, meter
+        )
     outcome = run_cases(runner, scenarios, truth, out, manifest)
     onramp_engine.dispose()
     marketplace_engine.dispose()

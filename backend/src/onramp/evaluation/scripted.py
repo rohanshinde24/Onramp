@@ -6,6 +6,7 @@ everything downstream without a model provider, so evaluation of the application
 deterministic and free. They say nothing about how well any real model investigates.
 """
 
+from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -62,6 +63,30 @@ def load_scripts(path: Path) -> ScriptSet:
     return ScriptSet.model_validate(yaml.safe_load(path.read_text()))
 
 
+def passages_in_force(session: Session, domain: str, at: datetime) -> list[RetrievedPassage]:
+    """Every passage of the policy versions in force for ``domain`` at ``at``."""
+    versions = {
+        (v.policy_id, v.version) for v in applicable_versions_for_domain(session, domain, at)
+    }
+    return [
+        RetrievedPassage(p.passage_id, p.policy_id, p.version, p.section, p.heading, p.text, 1.0)
+        for p in session.scalars(select(PolicyPassage))
+        if (p.policy_id, p.version) in versions
+    ]
+
+
+def rank_by_keywords(
+    passages: Sequence[RetrievedPassage], query: str, k: int
+) -> list[RetrievedPassage]:
+    """Deterministic word-overlap ranking, ties broken by passage ID."""
+    words = {w.strip(".,?").lower() for w in query.split() if len(w) > 3}
+    ranked = sorted(
+        passages,
+        key=lambda p: (-len(words & set(f"{p.heading} {p.text}".lower().split())), p.passage_id),
+    )
+    return ranked[:k]
+
+
 class KeywordPolicyRetriever:
     """Deterministic word-overlap ranking over the passages in force, read from PostgreSQL.
 
@@ -72,27 +97,15 @@ class KeywordPolicyRetriever:
         self._sessions = sessions
 
     def search(self, domain: str, at: datetime, query: str, k: int = 5) -> list[RetrievedPassage]:
-        words = {w.strip(".,?").lower() for w in query.split() if len(w) > 3}
         with self._sessions() as session:
-            versions = {
-                (v.policy_id, v.version)
-                for v in applicable_versions_for_domain(session, domain, at)
-            }
-            passages = [
-                p
-                for p in session.scalars(select(PolicyPassage))
-                if (p.policy_id, p.version) in versions
-            ]
-        scored = sorted(
-            passages,
-            key=lambda p: (
-                -len(words & set(f"{p.heading} {p.text}".lower().split())),
-                p.passage_id,
-            ),
-        )
-        return [
-            RetrievedPassage(
-                p.passage_id, p.policy_id, p.version, p.section, p.heading, p.text, 1.0
-            )
-            for p in scored[:k]
-        ]
+            return rank_by_keywords(passages_in_force(session, domain, at), query, k)
+
+
+class SnapshotPolicyRetriever:
+    """The same ranking over a fixed list of passages, with no database."""
+
+    def __init__(self, passages: Sequence[RetrievedPassage]) -> None:
+        self._passages = tuple(passages)
+
+    def search(self, domain: str, at: datetime, query: str, k: int = 5) -> list[RetrievedPassage]:
+        return rank_by_keywords(self._passages, query, k)

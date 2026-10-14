@@ -8,6 +8,7 @@ Prices are the provider's list prices per million tokens. A model with no price 
 metered, so a live run with it is refused rather than run blind.
 """
 
+import threading
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -82,14 +83,18 @@ class SpendMeter:
     cap_usd: Decimal | None = None
     spent_usd: Decimal = Decimal(0)
     calls: int = 0
+    # Batched investigations charge the meter from several threads.
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def check(self) -> None:
-        if self.cap_usd is not None and self.spent_usd >= self.cap_usd:
-            raise SpendCapReachedError(f"spent ${self.spent_usd:.4f} of a ${self.cap_usd} cap")
+        with self._lock:
+            if self.cap_usd is not None and self.spent_usd >= self.cap_usd:
+                raise SpendCapReachedError(f"spent ${self.spent_usd:.4f} of a ${self.cap_usd} cap")
 
     def add(self, dollars: Decimal) -> None:
-        self.spent_usd += dollars
-        self.calls += 1
+        with self._lock:
+            self.spent_usd += dollars
+            self.calls += 1
 
 
 @dataclass

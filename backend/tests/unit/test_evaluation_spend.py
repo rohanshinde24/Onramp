@@ -75,3 +75,10 @@ def test_live_runs_are_refused_without_a_cap(monkeypatch: pytest.MonkeyPatch) ->
 
     with pytest.raises(SystemExit, match="--max-cost"):
         case_eval.main()
+
+
+def test_batch_runs_are_refused_without_a_live_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("sys.argv", ["onramp-case-eval", "--batch"])
+
+    with pytest.raises(SystemExit, match="--batch records live answers"):
+        case_eval.main()
