@@ -1,11 +1,14 @@
 """Versioned investigator prompts. A change of wording is a new version, compared by the
-regression suite before it replaces the old one."""
+regression suite before it replaces the old one. Every investigation records the version it
+ran with, so a result can always be traced to the exact instructions the model saw."""
+
+from dataclasses import dataclass
 
 from onramp.cases.models import CaseType
 
-PROMPT_VERSION = "investigator-v1"
+DEFAULT_PROMPT_VERSION = "investigator-v1"
 
-_SYSTEM = """You are an investigator for a task marketplace's operations team. You examine one
+_V1_SYSTEM = """You are an investigator for a task marketplace's operations team. You examine one
 support case and conclude it, using read-only tools. You cannot change anything: a person
 reviews whatever you conclude, and software validates it before anything happens.
 
@@ -25,7 +28,7 @@ Rules:
 
 {guidance}"""
 
-_GUIDANCE = {
+_V1_GUIDANCE = {
     CaseType.PAYOUT: """Payout disputes: establish eligibility (submission accepted, review
 passed or overturned), the amount owed, every payment for the submission and its settlement
 history, and the settlement window in the policy in force. A payout adjustment's amount is what
@@ -39,8 +42,30 @@ the instructions are unclear, escalate.""",
 }
 
 
-def system_prompt(case_type: CaseType) -> str:
-    return _SYSTEM.format(guidance=_GUIDANCE[case_type])
+@dataclass(frozen=True)
+class InvestigatorPrompt:
+    system: str
+    guidance: dict[CaseType, str]
+
+    def render(self, case_type: CaseType) -> str:
+        return self.system.format(guidance=self.guidance[case_type])
+
+
+PROMPTS: dict[str, InvestigatorPrompt] = {
+    DEFAULT_PROMPT_VERSION: InvestigatorPrompt(_V1_SYSTEM, _V1_GUIDANCE),
+}
+
+
+class UnknownPromptVersionError(KeyError):
+    pass
+
+
+def system_prompt(case_type: CaseType, version: str = DEFAULT_PROMPT_VERSION) -> str:
+    try:
+        prompt = PROMPTS[version]
+    except KeyError:
+        raise UnknownPromptVersionError(version) from None
+    return prompt.render(case_type)
 
 
 NUDGE = "Continue: call a tool, or call submit_conclusion with your conclusion."

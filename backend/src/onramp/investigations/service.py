@@ -18,6 +18,7 @@ from onramp.agent.graph import DEFAULT_BUDGET, Budget, InvestigationResult, inve
 from onramp.agent.model import ChatModel
 from onramp.agent.models import InvestigationRun
 from onramp.agent.policy_access import passage_lookup
+from onramp.agent.prompts import DEFAULT_PROMPT_VERSION
 from onramp.agent.tools import CaseScope, CaseToolbox
 from onramp.audit.service import Actor, record_audit
 from onramp.cases.escalation import EscalationReason
@@ -53,8 +54,10 @@ class InvestigationService:
         *,
         budget: Budget = DEFAULT_BUDGET,
         clock: Clock = _utcnow,
+        prompt_version: str = DEFAULT_PROMPT_VERSION,
     ) -> None:
         self._sessions = sessions
+        self._prompt_version = prompt_version
         self._marketplace = marketplace
         self._retriever = retriever
         self._model = model
@@ -76,7 +79,13 @@ class InvestigationService:
             self._retriever,
             passage_lookup(self._sessions, scope.case_type.value, scope.incident_at),
         )
-        result = investigate(self._model, toolbox, scope.case_type, budget=self._budget)
+        result = investigate(
+            self._model,
+            toolbox,
+            scope.case_type,
+            budget=self._budget,
+            prompt_version=self._prompt_version,
+        )
 
         now = self._clock()
         with self._sessions() as session, session.begin():

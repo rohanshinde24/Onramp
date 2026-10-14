@@ -22,7 +22,7 @@ import onramp.models  # noqa: F401 - every table must be mapped before any sessi
 from onramp.actions.evidence import EvidenceRequester
 from onramp.actions.gateway import ActionGateway
 from onramp.agent.model import ChatModel
-from onramp.agent.prompts import PROMPT_VERSION
+from onramp.agent.prompts import DEFAULT_PROMPT_VERSION, PROMPTS
 from onramp.approvals.service import ApprovalService
 from onramp.cases.evidence_consumer import CaseEvidenceHandler
 from onramp.cases.service import CaseService
@@ -65,11 +65,14 @@ def build_services(
     model: ChatModel,
     writer: MarketplaceWriter | None = None,
     gateway: type[ActionGateway] = ActionGateway,
+    prompt_version: str = DEFAULT_PROMPT_VERSION,
 ) -> CaseServices:
     reader = SqlMarketplaceReader(marketplace)
     writer = writer or SqlMarketplaceWriter(marketplace, clock)
     checks = CheckService(onramp, reader, EvidenceRequester(writer), clock)
-    investigations = InvestigationService(onramp, reader, retriever, model, clock=clock)
+    investigations = InvestigationService(
+        onramp, reader, retriever, model, clock=clock, prompt_version=prompt_version
+    )
     action_gateway = gateway(onramp, reader, writer, clock)
     return CaseServices(
         cases=CaseService(onramp, reader, clock),
@@ -109,6 +112,7 @@ def main() -> None:
     parser.add_argument(
         "--faults", type=Path, help="scenario -> injected faults; none when omitted"
     )
+    parser.add_argument("--prompt", choices=sorted(PROMPTS), default=DEFAULT_PROMPT_VERSION)
     parser.add_argument("--min-outcome-accuracy", type=float, default=1.0)
     parser.add_argument(
         "--suite",
@@ -146,6 +150,7 @@ def main() -> None:
             clock,
             model,
             scenario_writer(marketplace, clock, faults),
+            prompt_version=args.prompt,
         ),
         corpus,
         scripts.model_for,
@@ -178,7 +183,7 @@ def main() -> None:
         "truth_version": truth.version,
         "scenarios": len(scenarios.scenarios),
         "model": scripts.model_name,
-        "prompt_version": PROMPT_VERSION,
+        "prompt_version": args.prompt,
         "retriever": "keyword_in_force",
         "reviewer": "per scenario" if args.reviewers else "honest: accepts and approves as shown",
         "limitations": list(LIMITATIONS),

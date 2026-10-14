@@ -123,3 +123,15 @@ def test_validated_conclusion_maps_to_a_proposal_with_passage_refs() -> None:
 
     assert request.action_params == {"amount_cents": 8400, "currency": "USD"}
     assert "policy_passage:payout_v12_section_4_3" in request.evidence_refs
+
+
+def test_prompt_versions_are_explicit_and_unknown_versions_fail() -> None:
+    from onramp.agent.prompts import (
+        DEFAULT_PROMPT_VERSION,
+        UnknownPromptVersionError,
+        system_prompt,
+    )
+
+    assert "untrusted_text" in system_prompt(CaseType.PAYOUT, DEFAULT_PROMPT_VERSION)
+    with pytest.raises(UnknownPromptVersionError):
+        system_prompt(CaseType.PAYOUT, "investigator-v99")

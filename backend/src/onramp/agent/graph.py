@@ -29,7 +29,7 @@ from onramp.agent.model import (
     ToolDefinition,
     ToolOutput,
 )
-from onramp.agent.prompts import NUDGE, PROMPT_VERSION, system_prompt
+from onramp.agent.prompts import DEFAULT_PROMPT_VERSION, NUDGE, system_prompt
 from onramp.agent.tools import CaseToolbox
 from onramp.cases.models import CaseType
 
@@ -59,7 +59,7 @@ class InvestigationResult:
     observations: Observations
     problems: list[str] = field(default_factory=list)
     model_name: str = ""
-    prompt_version: str = PROMPT_VERSION
+    prompt_version: str = DEFAULT_PROMPT_VERSION
 
 
 class State(TypedDict):
@@ -97,8 +97,9 @@ def investigate(
     *,
     budget: Budget = DEFAULT_BUDGET,
     clock: Callable[[], float] = time.monotonic,
+    prompt_version: str = DEFAULT_PROMPT_VERSION,
 ) -> InvestigationResult:
-    system = system_prompt(case_type)
+    system = system_prompt(case_type, prompt_version)
     tools = _tool_definitions(toolbox)
     observations = Observations()
     started = clock()
@@ -265,4 +266,5 @@ def investigate(
         observations=observations,
         problems=final["problems"],
         model_name=model.name,
+        prompt_version=prompt_version,
     )
