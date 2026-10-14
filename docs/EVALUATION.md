@@ -178,6 +178,43 @@ fault scenario is the normal one, with no extra marketplace write. A run that en
 injected error after every retry is reported as `injected_fault`, separately from application
 failures. The fault-by-fault behavior is in `RELIABILITY.md`.
 
+## Live-model evaluation
+
+Phase 16 measures real models on the same runner. Its tooling is built and tested without a
+paid call; no live result is published yet.
+
+* **Judgment suite.** `eval/judgment/` has 82 cases that all reach the investigator: 39 with a
+  definite answer and 43 that should escalate, so always escalating scores 52%. The cases are
+  generated from parameter tables in `onramp.evaluation.judgment`, each situation with one
+  written label rule; a test keeps the committed YAML identical to the generator.
+* **Prompt versions.** `investigator-v1`, `investigator-v2` (v1 plus a decision procedure per
+  case type drawn from the policies) and `investigator-terse`, a deliberately weakened prompt for
+  showing that the regression gate catches a worse prompt. Every result records its version.
+* **Spending cap.** `--model` requires `--max-cost`. Every call is priced from its usage (input,
+  cache reads and writes, output; batch at half price) and the run stops before the call that
+  would exceed the cap. Each result records its cost, and the summary reports cost per correct
+  outcome.
+* **Recorded answers.** Live answers are saved with a digest of exactly what the model was shown
+  each turn and replayed for free while the digest still matches. A changed world, prompt or
+  tool output re-asks from the first turn that differs.
+* **Batch mode.** `--batch` drives every case to the investigator, snapshots what its tools can
+  read, runs all investigations concurrently with each turn sent as one Message Batch, then
+  replays the recorded answers through the real runner. A test proves the replay needs no live
+  call, so a snapshot shows the model exactly what the database-backed tools would. Batch
+  latency is meaningless, so latency comes from a live run; batch requests also omit the live
+  path's refusal fallback.
+* **Comparison and gate.** `make compare BASE=... CANDIDATE=...` pairs two runs by case with
+  DuckDB and reports fixed and broken cases, the accuracy difference with a 95% paired bootstrap
+  interval, safety and cost per correct outcome. It fails on more safety violations, an
+  accuracy drop whose interval lies below zero, an optional cost limit, or a stopped run.
+  `make baseline` stores a finished run under `eval/baselines/`.
+
+Run it with:
+
+```sh
+make judgment-eval MODEL=claude-haiku-5-5 MAX_COST=1.00 PROMPT=investigator-v1 BATCH=--batch
+```
+
 ## What it does not show
 
 Scripted investigations mean this measures the application around the model, not any model's

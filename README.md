@@ -10,7 +10,8 @@ approver.
 
 ## Status
 
-Phases 0 through 15 are complete. What works today:
+Phases 0 through 15 are complete, and the Phase 16 tooling for evaluating real models is built.
+What works today:
 
 * tenants, users and roles, with bearer-token authentication whose role is always read from
   the database
@@ -41,6 +42,9 @@ Phases 0 through 15 are complete. What works today:
   each run against a scripted investigator or reviewer that goes along with it
 * fault-injection evaluation: 15 cases recovered through lost and timed-out marketplace
   responses, model and search outages, crashes after commit, and duplicate or late events
+* live-model evaluation tooling: an 82-case judgment suite, versioned prompts, a required
+  spending cap, recorded answers replayed for free, half-price batch runs, and DuckDB run
+  comparison with a regression gate (no live result published yet)
 
 Not built yet: model and prompt regression with
 real models, the real operator console, full observability, Kubernetes packaging, final scale
