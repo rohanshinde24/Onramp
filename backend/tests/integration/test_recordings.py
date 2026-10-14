@@ -66,7 +66,7 @@ def run_recorded(
             load_scripts(CASES / "investigations.yaml"),
         )
         meter = SpendMeter(cap_usd=Decimal("1"))
-        runner._models = lambda sid: RecordedModel(  # type: ignore[method-assign]
+        runner._models = lambda sid: RecordedModel(
             RecordingKey(MODEL, "investigator-v1", sid), store, lambda: provider
         )
         runner._meter = meter
