@@ -57,18 +57,9 @@ class AnthropicChatModel:
 
         try:
             response = self._client.beta.messages.create(
-                model=self._model,
-                max_tokens=self._max_tokens,
+                **self.request(system, transcript, tools),
                 betas=[FALLBACK_BETA],
                 fallbacks="default",
-                output_config={"effort": self._effort},
-                cache_control={"type": "ephemeral"},
-                system=system,
-                tools=[
-                    {"name": t.name, "description": t.description, "input_schema": t.input_schema}
-                    for t in tools
-                ],
-                messages=[to_wire(m) for m in transcript],
             )
         except (
             anthropic.APIConnectionError,  # includes APITimeoutError
@@ -77,6 +68,23 @@ class AnthropicChatModel:
         ) as exc:
             raise ModelUnavailableError(f"{type(exc).__name__}: {exc}") from exc
         return from_wire(response)
+
+    def request(
+        self, system: str, transcript: Sequence[Message], tools: Sequence[ToolDefinition]
+    ) -> dict[str, Any]:
+        """The Messages API parameters for one turn, shared by live and batched calls."""
+        return {
+            "model": self._model,
+            "max_tokens": self._max_tokens,
+            "output_config": {"effort": self._effort},
+            "cache_control": {"type": "ephemeral"},
+            "system": system,
+            "tools": [
+                {"name": t.name, "description": t.description, "input_schema": t.input_schema}
+                for t in tools
+            ],
+            "messages": [to_wire(m) for m in transcript],
+        }
 
 
 def to_wire(message: Message) -> dict[str, Any]:
