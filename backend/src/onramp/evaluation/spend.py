@@ -99,7 +99,9 @@ class MeteredModel:
     inner: ChatModel
     meter: SpendMeter
     batch: bool = False
+    # What this scenario's answers cost, and the part of that replayed from recordings for free.
     spent_usd: Decimal = Decimal(0)
+    replayed_usd: Decimal = Decimal(0)
     usages: list[Usage] = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -116,8 +118,14 @@ class MeteredModel:
     ) -> ModelResponse:
         self.meter.check()
         response = self.inner.respond(system, transcript, tools)
-        dollars = cost(response.usage, self._price, batch=self.batch)
+        # A recording model knows what each answer cost when it was made, including any batch
+        # discount; a replayed answer is reported at that cost but charges nothing now.
+        recorded = getattr(self.inner, "turn_costs", None)
+        dollars = recorded[-1] if recorded else cost(response.usage, self._price, batch=self.batch)
         self.spent_usd += dollars
         self.usages.append(response.usage)
-        self.meter.add(dollars)
+        if getattr(self.inner, "last_replayed", False):
+            self.replayed_usd += dollars
+        else:
+            self.meter.add(dollars)
         return response

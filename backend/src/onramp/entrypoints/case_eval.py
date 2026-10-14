@@ -34,6 +34,7 @@ from onramp.config import AppEnv, get_settings
 from onramp.db import migrate
 from onramp.db.engine import make_engine, make_session_factory
 from onramp.evaluation.faults import ScenarioFaults, load_faults, no_faults
+from onramp.evaluation.recordings import RecordedModel, RecordingKey, RecordingStore
 from onramp.evaluation.report import LIMITATIONS, gate_failures, git_state, run_cases
 from onramp.evaluation.reviewers import honest_reviewers, load_reviewers
 from onramp.evaluation.runner import CaseEvaluationRunner
@@ -106,11 +107,25 @@ def _recreate(url: str) -> str:
 
 
 def _live_models(args: argparse.Namespace, api_key: str) -> tuple[Callable[[str], ChatModel], str]:
-    import anthropic  # optional dependency, needed only for live runs
+    """Recorded answers where they still match; the live model, built on first need, for the
+    rest."""
+    store = RecordingStore(args.recordings)
+    name = f"{args.model}@{args.effort}"
+    live: list[ChatModel] = []
 
-    client = anthropic.Anthropic(api_key=api_key, timeout=120.0)
-    model = AnthropicChatModel(client, model=args.model, effort=args.effort)
-    return (lambda _: model), model.name
+    def provider() -> ChatModel:
+        if not live:
+            import anthropic  # optional dependency, needed only for live calls
+
+            client = anthropic.Anthropic(api_key=api_key, timeout=120.0)
+            live.append(AnthropicChatModel(client, model=args.model, effort=args.effort))
+        return live[0]
+
+    def model_for(scenario_id: str) -> ChatModel:
+        key = RecordingKey(name, args.prompt, scenario_id, args.repeat)
+        return RecordedModel(key, store, provider)
+
+    return model_for, name
 
 
 def main() -> None:
@@ -131,6 +146,13 @@ def main() -> None:
         help="investigate with this live model instead of the scripts; costs money",
     )
     parser.add_argument("--effort", choices=["low", "medium", "high"], default="medium")
+    parser.add_argument(
+        "--recordings",
+        type=Path,
+        default=ROOT / "artifacts" / "recordings",
+        help="recorded live answers; matching ones are replayed instead of paid for again",
+    )
+    parser.add_argument("--repeat", type=int, default=0, help="which repeat of a live run this is")
     parser.add_argument(
         "--max-cost",
         type=Decimal,
@@ -217,6 +239,8 @@ def main() -> None:
         "scenarios": len(scenarios.scenarios),
         "model": model_name,
         "spend_cap_usd": str(args.max_cost) if args.max_cost else None,
+        "recordings": str(args.recordings.resolve().relative_to(ROOT)) if args.model else None,
+        "repeat": args.repeat if args.model else None,
         "prompt_version": args.prompt,
         "retriever": "keyword_in_force",
         "reviewer": "per scenario" if args.reviewers else "honest: accepts and approves as shown",
@@ -227,7 +251,10 @@ def main() -> None:
     marketplace_engine.dispose()
 
     print(f"run {run_id}  commit {commit[:8]}  dirty={dirty}  model={model_name}")
-    print(f"  spent ${outcome.summary['cost_usd']:.4f} on {meter.calls} model calls")
+    print(
+        f"  paid ${outcome.summary['paid_this_run_usd']:.4f} for {meter.calls} live model calls;"
+        f" answers cost ${outcome.summary['cost_usd']:.4f} in total including replays"
+    )
     for run in outcome.runs:
         grade = next((g for g in outcome.grades if g.scenario_id == run.scenario_id), None)
         verdict = "n/a" if grade is None else "correct" if grade.outcome_correct else "WRONG"

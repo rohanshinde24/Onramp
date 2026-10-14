@@ -81,6 +81,8 @@ class ScenarioRun:
     steps: list[str] = field(default_factory=list)
     faults: list[str] = field(default_factory=list)
     cost_usd: float = 0.0
+    # The part of cost_usd replayed from recorded answers, which this run did not pay for.
+    replayed_usd: float = 0.0
     error: str | None = None
     observation: CaseObservation | None = None
     wall_ms: int = 0
@@ -176,6 +178,7 @@ class CaseEvaluationRunner:
             run.error = f"{type(exc).__name__}: {exc}"
 
         run.cost_usd = float(model.spent_usd)
+        run.replayed_usd = float(model.replayed_usd)
         if run.case_id is None and run.status is not RunStatus.SUCCESS:
             return _finish(run, started)  # failed before intake decided anything
         try:

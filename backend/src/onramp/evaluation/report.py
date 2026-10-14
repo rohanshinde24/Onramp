@@ -103,11 +103,13 @@ def run_cases(
 def summarize_runs(runs: Sequence[ScenarioRun], grades: Sequence[CaseGrade]) -> dict[str, Any]:
     statuses = Counter(run.status.value for run in runs)
     total_cost = sum(run.cost_usd for run in runs)
+    replayed = sum(run.replayed_usd for run in runs)
     correct = sum(grade.outcome_correct for grade in grades)
     return {
         "scenarios": len(runs),
         "status": {status.value: statuses.get(status.value, 0) for status in RunStatus},
         "cost_usd": round(total_cost, 6),
+        "paid_this_run_usd": round(total_cost - replayed, 6),
         "cost_per_correct_outcome_usd": round(total_cost / correct, 6) if correct else None,
         "graded": summarize_cases(grades) if grades else None,
         "wrong_outcomes": sorted(g.scenario_id for g in grades if not g.outcome_correct),
@@ -145,6 +147,7 @@ def _record(run_id: str, run: ScenarioRun, grade: CaseGrade | None) -> dict[str,
         "final_state": run.final_state,
         "faults": run.faults,
         "cost_usd": run.cost_usd,
+        "replayed_usd": run.replayed_usd,
         "steps": run.steps,
         "wall_ms": run.wall_ms,
         "observation": _observation(run.observation) if run.observation else None,
