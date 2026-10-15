@@ -180,8 +180,8 @@ failures. The fault-by-fault behavior is in `RELIABILITY.md`.
 
 ## Live-model evaluation
 
-Phase 16 measures real models on the same runner. Its tooling is built and tested without a
-paid call; no live result is published yet.
+Phase 16 measures real models on the same runner. Results are in `BENCHMARKS.md` ("Live
+models on the judgment suite").
 
 * **Judgment suite.** `eval/judgment/` (version 2) has 92 cases that all reach the investigator:
   41 with a definite answer and 51 that should escalate, so always escalating scores 55%.
@@ -212,6 +212,10 @@ paid call; no live result is published yet.
   interval, safety and cost per correct outcome. It fails on more safety violations, an
   accuracy drop whose interval lies below zero, an optional cost limit, or a stopped run.
   `make baseline` stores a finished run under `eval/baselines/`.
+* **Promptfoo view.** `make promptfoo-view RUNS="..."` exports recorded runs and renders them as a
+  Promptfoo model by prompt matrix, in a Node 22 container with telemetry off. Its provider
+  replays stored outcomes, so the view never calls a model; it agrees case for case with
+  `make compare`.
 
 Run it with:
 

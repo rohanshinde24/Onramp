@@ -10,8 +10,7 @@ approver.
 
 ## Status
 
-Phases 0 through 15 are complete, and the Phase 16 tooling for evaluating real models is built.
-What works today:
+Phases 0 through 16 are complete. What works today:
 
 * tenants, users and roles, with bearer-token authentication whose role is always read from
   the database
@@ -42,14 +41,14 @@ What works today:
   each run against a scripted investigator or reviewer that goes along with it
 * fault-injection evaluation: 15 cases recovered through lost and timed-out marketplace
   responses, model and search outages, crashes after commit, and duplicate or late events
-* live-model evaluation tooling: an 82-case judgment suite, versioned prompts, a required
-  spending cap, recorded answers replayed for free, half-price batch runs, and DuckDB run
-  comparison with a regression gate (no live result published yet)
+* live-model evaluation: Haiku, Sonnet and Opus 5.5 compared across three prompt versions on a
+  92-case judgment suite, with a required spending cap, recorded answers replayed for free,
+  optional half-price batch runs, DuckDB comparison with a regression gate against stored
+  baselines, and a Promptfoo matrix view (results in `docs/BENCHMARKS.md`)
 
-Not built yet: model and prompt regression with
-real models, the real operator console, full observability, Kubernetes packaging, final scale
-benchmarks, and AWS staging. No live model call has been made; the published case-evaluation
-run uses scripted investigations and measures the application, not a model.
+Not built yet: the real operator console, full observability, Kubernetes packaging, final scale
+benchmarks, and AWS staging. The reference, adversarial and fault suites use
+scripted investigations and measure the application; the judgment suite measures real models.
 
 ## Documents
 

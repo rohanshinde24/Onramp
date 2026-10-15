@@ -54,6 +54,69 @@ Limits:
 * I wrote the worlds, labels, scripts and attacks. These are regression checks of specified
   behavior, not benchmarks, and the scores are expected to be perfect.
 
+## Live models on the judgment suite
+
+Command: `make judgment-eval MODEL=<model> MAX_COST=<dollars> PROMPT=<version>` (live calls, not
+batched), compared with `make compare`. Viewable as a model by prompt matrix with
+`make promptfoo-view`, which replays these results and makes no model call.
+
+Dataset: `eval/judgment/` version 2, 92 cases that all reach the investigator (41 with a
+definite answer, 51 that should escalate, so always escalating scores 0.554). Effort `medium`,
+keyword policy retriever, honest reviewer. Every run: commit `295a425`, clean tree, 92 of 92
+cases ran, 0 safety violations. Accuracy counts resolution, action, amount, escalation and
+policy version together. Escalation recall is the share of cases that should go to a person
+that did. Seconds are the investigation's own wall-clock time per case.
+
+| Model | Prompt | Repeat | Accuracy | Escalation recall | Escalation precision | Cost | Cost per correct | Median s | p90 s | Run |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Haiku 5.5 | v1 | 0 | 0.511 | 0.84 | 0.61 | $0.24 | $0.0051 | 9.7 | 12.9 | `20261014T161154Z` |
+| Haiku 5.5 | v1 | 1 | 0.554 | 0.90 | 0.63 | $0.24 | $0.0047 | 10.2 | 12.9 | `20261014T165807Z` |
+| Haiku 5.5 | v1 | 2 | 0.533 | 0.86 | 0.62 | $0.25 | $0.0050 | 10.6 | 13.2 | `20261014T171423Z` |
+| Haiku 5.5 | v2 | 0 | 0.815 | 1.00 | 0.75 | $0.21 | $0.0027 | 8.5 | 12.3 | `20261014T162708Z` |
+| Haiku 5.5 | terse | 0 | 0.489 | 0.61 | 0.63 | $0.26 | $0.0057 | 10.6 | 14.7 | `20261014T164049Z` |
+| Sonnet 5.5 | v1 | 0 | 0.587 | 0.63 | 0.67 | $1.35 | $0.0251 | 7.3 | 9.3 | `20261014T173115Z` |
+| Sonnet 5.5 | v2 | 0 | 0.989 | 0.98 | 1.00 | $1.10 | $0.0121 | 7.2 | 8.8 | `20261014T174314Z` |
+| Sonnet 5.5 | terse | 0 | 0.565 | 0.45 | 0.77 | $1.22 | $0.0234 | 8.5 | 10.4 | `20261014T175442Z` |
+| Opus 5.5 | v1 | 0 | 0.533 | 0.90 | 0.55 | $3.44 | $0.0702 | 14.0 | 16.6 | `20261014T180801Z` |
+| Opus 5.5 | v2 | 0 | 0.848 | 1.00 | 0.78 | $2.76 | $0.0354 | 11.9 | 18.7 | `20261015T020510Z` |
+
+Regression gate results (`make compare`, 95% paired bootstrap over the 92 cases):
+
+| Base | Candidate | Accuracy change | Gate |
+|---|---|---|---|
+| Haiku v1 | Haiku v2 | +0.304 (+0.217 to +0.402) | pass |
+| Opus v1 | Opus v2 | +0.315 (+0.228 to +0.413) | pass |
+| Haiku v2 | Haiku terse | -0.326 (-0.424 to -0.228) | fail |
+| Sonnet v2 (baseline) | Sonnet terse | -0.424 (-0.533 to -0.315) | fail |
+
+Total spent on these runs and the smoke test before them: about $11.
+
+What this shows:
+
+* The prompt mattered more than the model. Prompt v2 added 30 to 40 points of accuracy on every
+  model, and under v1 the most expensive model scored lowest of the three.
+* Cost per correct outcome favours the right prompt on a cheaper model: Haiku v2 reached 0.815
+  for about a quarter of a cent per correct case, and Sonnet v2 reached 0.989 for about 1.2
+  cents, against 7 cents for Opus v1.
+* The gate passes real improvements and fails a real model's regression. Sonnet v2 and Haiku v2
+  are stored as baselines under `eval/baselines/judgment-eval/`.
+* Three Haiku v1 runs landed between 0.511 and 0.554, so differences of 30 points are not run
+  to run noise.
+* Under v1, models read "the policy in force at the incident time" as "the facts at the incident
+  time" and failed cases where requested evidence arrived later; v2's explicit decision steps
+  fixed most of them.
+
+Limits:
+
+* I wrote the cases, the label rules and both prompts. v2 was written before any live run, but
+  its decision steps follow the same policies the labels do, so these scores measure agreement
+  with my reading of the policies, not an independent ground truth.
+* The regression the gate caught is a deliberately weakened prompt (`investigator-terse`), not an
+  accidental one.
+* One run per configuration except Haiku v1 (three). Sonnet and Opus variance is not measured.
+* Single effort level, keyword retrieval rather than the production dense retriever, scripted
+  reviewers, synthetic data. Latency is per investigation on one laptop, not a service SLO.
+
 ## Policy retrieval
 
 Command: `make up && make migrate && make retrieval-eval` (with `pip install -e 'backend[embeddings]'`).
