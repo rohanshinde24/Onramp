@@ -4,7 +4,7 @@ This log records material differences between the original phased implementation
 system that was actually built. It is not a defect list. Some changes closed correctness gaps;
 others are explicit local-development compromises or deferred production work.
 
-Last reviewed: 2026-10-13 at commit `143186f`.
+Last reviewed: 2026-10-15 at commit `89bc467`.
 
 ## Correctness changes discovered during implementation
 
@@ -164,10 +164,29 @@ The runner that followed differs from the original plan in four deliberate ways:
 The scenario format also gained `subject_id` (what the reporter names) and an optional truth
 `note`, before any dataset was published.
 
+## Phase 16 adaptations
+
+* Promptfoo is a viewer, not the runner. The plan named Promptfoo for the model by prompt
+  matrix. Running models through Promptfoo would have bypassed the application path this
+  project evaluates, so models run through the same case runner and Promptfoo renders the
+  recorded results with a provider that replays them. It needs Node 22, so it runs in a
+  container rather than changing the host's Node.
+* The published runs are live, not batched. Batch mode is built and tested and halves cost, but
+  the published comparison uses live calls so every result carries real latency, as the service
+  would. Batch remains available for cheaper reruns.
+* The judgment suite's labels changed once. Version 1 labelled payout v11 partial settlements
+  UNDERPAID; every model in the first live run escalated them, consistent with the
+  investigator's rules and the deterministic check, and version 2 labels them escalations.
+* The live smoke test found two defects scripted tests could not: conclusion reason codes the
+  proposal schema rejected (now constrained in the conclusion schema, with escalation instead
+  of a crash), and retries counting their own replayed answers as cost.
+
 ## Deferred evaluation work
 
-* Real models over the same runner, with the production dense retriever, in Phase 16. That needs
-  credentials and an explicit spending limit.
+* Real-model runs with the production dense retriever instead of the keyword retriever, more
+  than one effort level, and repeats for Sonnet and Opus.
+* In the only batch run attempted, each batch held 49 requests rather than one per case; the run
+  was stopped before this was explained. Check `batch.not_fully_recorded` on the next batch run.
 * World events are delivered while a case waits and after it stops. Events that race with
   checks or an investigation in progress are not modeled.
 * The runner retries activities with policies mirrored from the workflow module rather than
