@@ -1,7 +1,7 @@
 BACKEND := backend
 PY := $(BACKEND)/.venv/bin
 
-.PHONY: install lint format typecheck test test-integration test-kafka test-search check up down api-image migrate seed dlq-replay load-policies retrieval-eval case-eval adversarial-eval fault-eval compare baseline judgment-eval judgment-dataset
+.PHONY: install lint format typecheck test test-integration test-kafka test-search check up down api-image migrate seed dlq-replay load-policies retrieval-eval case-eval adversarial-eval fault-eval compare baseline judgment-eval judgment-dataset promptfoo-view
 
 install:
 	python3.13 -m venv $(BACKEND)/.venv
@@ -97,3 +97,14 @@ judgment-dataset:
 	$(PY)/python -c "from pathlib import Path; from onramp.evaluation.judgment import render; \
 	s, t = render(); Path('eval/judgment/scenarios.yaml').write_text(s); \
 	Path('eval/judgment/truth.yaml').write_text(t)"
+
+# A Promptfoo model-by-prompt view of recorded runs. It replays stored outcomes and makes no
+# model call. Promptfoo needs Node 22, so it runs in a container.
+# make promptfoo-view RUNS="artifacts/judgment-eval/<run_id> ..."
+PROMPTFOO_IMAGE := node:22.22.0-bookworm-slim
+promptfoo-view:
+	$(PY)/onramp-promptfoo-export $(RUNS)
+	docker run --rm -v "$(CURDIR)":/work -w /work -e PROMPTFOO_DISABLE_TELEMETRY=1 \
+		-e PROMPTFOO_DISABLE_UPDATE=1 $(PROMPTFOO_IMAGE) npx -y promptfoo@0.123.1 eval \
+		-c artifacts/promptfoo/promptfooconfig.yaml --no-cache -o artifacts/promptfoo/view.json \
+		|| test $$? -eq 100  # 100: some cases were answered wrong, which the view shows
