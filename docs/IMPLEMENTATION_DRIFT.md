@@ -169,8 +169,8 @@ The scenario format also gained `subject_id` (what the reporter names) and an op
 * Promptfoo is a viewer, not the runner. The plan named Promptfoo for the model by prompt
   matrix. Running models through Promptfoo would have bypassed the application path this
   project evaluates, so models run through the same case runner and Promptfoo renders the
-  recorded results with a provider that replays them. It needs Node 22, so it runs in a
-  container rather than changing the host's Node.
+  recorded results with a provider that replays them. It needs Node 22, the version pinned in
+  `.nvmrc`; `make promptfoo-view` takes it from nvm.
 * The published runs are live, not batched. Batch mode is built and tested and halves cost, but
   the published comparison uses live calls so every result carries real latency, as the service
   would. Batch remains available for cheaper reruns.

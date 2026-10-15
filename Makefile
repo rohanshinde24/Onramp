@@ -99,12 +99,12 @@ judgment-dataset:
 	Path('eval/judgment/truth.yaml').write_text(t)"
 
 # A Promptfoo model-by-prompt view of recorded runs. It replays stored outcomes and makes no
-# model call. Promptfoo needs Node 22, so it runs in a container.
+# model call. Promptfoo needs Node 22: the version in .nvmrc, taken from nvm when installed.
 # make promptfoo-view RUNS="artifacts/judgment-eval/<run_id> ..."
-PROMPTFOO_IMAGE := node:22.22.0-bookworm-slim
+NODE_BIN := $(shell . "$$HOME/.nvm/nvm.sh" >/dev/null 2>&1 && nvm which $$(cat .nvmrc) 2>/dev/null | xargs dirname 2>/dev/null)
 promptfoo-view:
 	$(PY)/onramp-promptfoo-export $(RUNS)
-	docker run --rm -v "$(CURDIR)":/work -w /work -e PROMPTFOO_DISABLE_TELEMETRY=1 \
-		-e PROMPTFOO_DISABLE_UPDATE=1 $(PROMPTFOO_IMAGE) npx -y promptfoo@0.123.1 eval \
-		-c artifacts/promptfoo/promptfooconfig.yaml --no-cache -o artifacts/promptfoo/view.json \
+	PATH="$(NODE_BIN):$$PATH" PROMPTFOO_DISABLE_TELEMETRY=1 PROMPTFOO_DISABLE_UPDATE=1 \
+		npx -y promptfoo@0.123.1 eval -c artifacts/promptfoo/promptfooconfig.yaml --no-cache \
+		-o artifacts/promptfoo/view.json \
 		|| test $$? -eq 100  # 100: some cases were answered wrong, which the view shows

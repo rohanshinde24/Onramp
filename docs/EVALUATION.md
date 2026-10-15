@@ -213,7 +213,7 @@ models on the judgment suite").
   accuracy drop whose interval lies below zero, an optional cost limit, or a stopped run.
   `make baseline` stores a finished run under `eval/baselines/`.
 * **Promptfoo view.** `make promptfoo-view RUNS="..."` exports recorded runs and renders them as a
-  Promptfoo model by prompt matrix, in a Node 22 container with telemetry off. Its provider
+  Promptfoo model by prompt matrix, using the Node version in `.nvmrc` with telemetry off. Its provider
   replays stored outcomes, so the view never calls a model; it agrees case for case with
   `make compare`.
 
