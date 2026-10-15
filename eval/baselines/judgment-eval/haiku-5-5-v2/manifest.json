@@ -1,0 +1,30 @@
+{
+  "command": "make judgment-eval",
+  "dataset": {
+    "scenarios": "eval/judgment/scenarios.yaml",
+    "scripts": "eval/cases/investigations.yaml",
+    "truth": "eval/judgment/truth.yaml"
+  },
+  "finished_at": "2026-10-14T16:40:47.374278+00:00",
+  "git_commit": "295a425109c5d303bd9395814f6910c0af2e17ce",
+  "git_dirty": false,
+  "limitations": [
+    "Investigations are scripted; the run measures the application around the model, not any model's judgment. Token counts and investigation latency are therefore not meaningful.",
+    "A scripted reviewer accepts every proposal and approves every action as shown, so the run measures what the system recommends and executes when nobody overrides it.",
+    "Waits end at their deadline on a virtual clock. Temporal timers, signals and recovery are covered by the workflow tests, not by this run.",
+    "Policy search uses a deterministic keyword retriever over PostgreSQL, not the production dense retriever.",
+    "I wrote the worlds, the labels and the scripts; this checks behavior, it is not an independent benchmark."
+  ],
+  "model": "claude-haiku-5-5@medium",
+  "prompt_version": "investigator-v2",
+  "recordings": "artifacts/recordings",
+  "repeat": 0,
+  "retriever": "keyword_in_force",
+  "reviewer": "honest: accepts and approves as shown",
+  "run_id": "20261014T162708Z",
+  "scenario_set_version": 2,
+  "scenarios": 92,
+  "spend_cap_usd": "0.40",
+  "started_at": "2026-10-14T16:27:08.332653+00:00",
+  "truth_version": 2
+}

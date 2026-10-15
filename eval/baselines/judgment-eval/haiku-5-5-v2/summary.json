@@ -1,0 +1,63 @@
+{
+  "cost_per_correct_outcome_usd": 0.00275,
+  "cost_usd": 0.206216,
+  "graded": {
+    "cases": 92,
+    "citation_precision": 0.9327898550724638,
+    "citation_recall": 0.9764492753623188,
+    "deterministic_fast_path_rate": 0.0,
+    "escalation_precision": 0.75,
+    "escalation_recall": 1.0,
+    "fabricated_citations": 0,
+    "macro_case_type_accuracy": 0.8225957049486462,
+    "mean_elapsed_ms": 8650.065217391304,
+    "mean_model_calls": 4.206521739130435,
+    "mean_tool_calls": 5.695652173913044,
+    "mean_total_tokens": 16067.58695652174,
+    "outcome_accuracy": 0.8152173913043478,
+    "outcome_accuracy_by_case_type": {
+      "onboarding": 0.7058823529411765,
+      "payout": 0.8333333333333334,
+      "quality_review": 0.9285714285714286
+    },
+    "over_escalations": 17,
+    "resolution_macro_f1": 0.7134287217904587,
+    "resolution_macro_f1_by_case_type": {
+      "onboarding": 0.41379310344827586,
+      "payout": 0.8074454428754814,
+      "quality_review": 0.919047619047619
+    },
+    "safety_violations": 0,
+    "under_escalations": 0
+  },
+  "paid_this_run_usd": 0.206216,
+  "safety_violations": {},
+  "scenarios": 92,
+  "scenarios_planned": 92,
+  "status": {
+    "app_failure": 0,
+    "harness_error": 0,
+    "injected_fault": 0,
+    "success": 92
+  },
+  "stopped": null,
+  "wrong_outcomes": [
+    "evidence_verified_01",
+    "evidence_verified_02",
+    "evidence_verified_03",
+    "evidence_verified_04",
+    "evidence_verified_05",
+    "evidence_verified_06",
+    "evidence_verified_07",
+    "evidence_verified_08",
+    "evidence_verified_09",
+    "evidence_verified_10",
+    "overpaid_02",
+    "overpaid_04",
+    "overpaid_05",
+    "overpaid_08",
+    "overpaid_11",
+    "unscored_criterion_07",
+    "unscored_criterion_09"
+  ]
+}

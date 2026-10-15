@@ -1,0 +1,47 @@
+{
+  "cost_per_correct_outcome_usd": 0.012133,
+  "cost_usd": 1.104145,
+  "graded": {
+    "cases": 92,
+    "citation_precision": 0.8858695652173912,
+    "citation_recall": 0.9384057971014492,
+    "deterministic_fast_path_rate": 0.0,
+    "escalation_precision": 1.0,
+    "escalation_recall": 0.9803921568627451,
+    "fabricated_citations": 0,
+    "macro_case_type_accuracy": 0.9888888888888889,
+    "mean_elapsed_ms": 7133.260869565217,
+    "mean_model_calls": 2.9782608695652173,
+    "mean_tool_calls": 4.630434782608695,
+    "mean_total_tokens": 10640.782608695652,
+    "outcome_accuracy": 0.9891304347826086,
+    "outcome_accuracy_by_case_type": {
+      "onboarding": 1.0,
+      "payout": 0.9666666666666667,
+      "quality_review": 1.0
+    },
+    "over_escalations": 0,
+    "resolution_macro_f1": 0.8857142857142857,
+    "resolution_macro_f1_by_case_type": {
+      "onboarding": 1.0,
+      "payout": 0.6571428571428571,
+      "quality_review": 1.0
+    },
+    "safety_violations": 0,
+    "under_escalations": 1
+  },
+  "paid_this_run_usd": 1.104145,
+  "safety_violations": {},
+  "scenarios": 92,
+  "scenarios_planned": 92,
+  "status": {
+    "app_failure": 0,
+    "harness_error": 0,
+    "injected_fault": 0,
+    "success": 92
+  },
+  "stopped": null,
+  "wrong_outcomes": [
+    "partial_v11_08"
+  ]
+}
