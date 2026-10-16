@@ -241,11 +241,14 @@ def test_a_late_event_for_a_finished_case_is_a_no_op() -> None:
     redelivered and fail forever."""
 
     async def scenario() -> None:
-        async with await WorkflowEnvironment.start_time_skipping() as environment, Worker(
-            environment.client,
-            task_queue=WORKFLOW_TASK_QUEUE,
-            workflows=[CaseWorkflow],
-            activities=[_read_resolved],
+        async with (
+            await WorkflowEnvironment.start_time_skipping() as environment,
+            Worker(
+                environment.client,
+                task_queue=WORKFLOW_TASK_QUEUE,
+                workflows=[CaseWorkflow],
+                activities=[_read_resolved],
+            ),
         ):
             request = CaseWorkflowInput("acme", "case_done")
             handle = await environment.client.start_workflow(
