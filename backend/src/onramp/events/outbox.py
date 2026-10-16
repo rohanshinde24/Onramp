@@ -21,6 +21,7 @@ from onramp.events.models import (
     OutboxEventColumns,
 )
 from onramp.telemetry.logging import current_log_context
+from onramp.telemetry.propagation import current_carrier
 
 
 class ContractMismatchError(TypeError):
@@ -83,6 +84,7 @@ def emit(
             aggregate_id=aggregate_id,
             aggregate_version=version,
             envelope=envelope.model_dump(mode="json"),
+            trace_context=current_carrier(),
         )
     )
     session.flush()

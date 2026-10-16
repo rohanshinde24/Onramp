@@ -24,6 +24,8 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Protocol
 
+from opentelemetry import trace
+from opentelemetry.trace import SpanKind
 from pydantic import ValidationError
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import InterfaceError, OperationalError
@@ -32,8 +34,10 @@ from sqlalchemy.orm import Session, sessionmaker
 from onramp.events.envelope import EventEnvelope
 from onramp.events.models import ProcessedEvent
 from onramp.telemetry.logging import log_context
+from onramp.telemetry.propagation import context_from, decode_headers
 
 log = logging.getLogger(__name__)
+_tracer = trace.get_tracer("onramp.events")
 
 # Failures of the consumer's own dependencies. These never park an event: parking is for
 # events that cannot be handled, not for an outage that will pass.
@@ -115,11 +119,29 @@ class ConsumerRunner:
 
     def process(self, message: RawMessage) -> Outcome:
         """Handle one message completely, including its offset commit."""
-        outcome = self._outcome(message)
-        self._after_commit(message, outcome)
-        self._source.commit(message)
-        self.stats.add(outcome)
-        return outcome
+        headers = decode_headers(message.headers)
+        with _tracer.start_as_current_span(
+            f"process {message.topic}",
+            context=context_from(headers),
+            kind=SpanKind.CONSUMER,
+            attributes={
+                "messaging.system": "kafka",
+                "messaging.operation.type": "process",
+                "messaging.destination.name": message.topic,
+                "messaging.consumer.group.name": self._handler.group,
+                "messaging.destination.partition.id": str(message.partition),
+                "messaging.kafka.offset": message.offset,
+                "onramp.event_type": headers.get("event_type", ""),
+            },
+        ) as span:
+            outcome = self._outcome(message)
+            span.set_attribute("onramp.consumer.outcome", outcome.value)
+            # The post-commit hook (a Temporal signal) runs inside this span, so the workflow
+            # that wakes up joins the same trace.
+            self._after_commit(message, outcome)
+            self._source.commit(message)
+            self.stats.add(outcome)
+            return outcome
 
     def _after_commit(self, message: RawMessage, outcome: Outcome) -> None:
         hook = getattr(self._handler, "after_commit", None)

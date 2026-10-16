@@ -21,13 +21,17 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
+from opentelemetry import propagate, trace
+from opentelemetry.trace import Span, SpanKind, StatusCode
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from onramp.events.envelope import EventEnvelope
 from onramp.events.models import OutboxEvent, OutboxEventColumns
+from onramp.telemetry.propagation import context_from
 
 log = logging.getLogger(__name__)
+_tracer = trace.get_tracer("onramp.events")
 Clock = Callable[[], datetime]
 
 
@@ -105,18 +109,26 @@ class OutboxPublisher:
             if not rows:
                 return CycleStats(0, 0, 0)
 
-            results = {r.event_id: r for r in self._sink.publish([_message(row) for row in rows])}
-            published = failed = 0
-            for row in rows:
-                result = results.get(row.event_id, PublishResult(row.event_id, "no ack"))
-                if result.ok:
-                    row.published_at = now
-                    published += 1
-                else:
-                    row.attempts += 1
-                    row.last_error = (result.error or "")[:1000]
-                    row.next_attempt_at = now + backoff(row.attempts)
-                    failed += 1
+            # One producer span per event, continuing the trace of the code that emitted it.
+            spans = {row.event_id: _publish_span(row) for row in rows}
+            try:
+                messages = [_message(row, spans[row.event_id]) for row in rows]
+                results = {r.event_id: r for r in self._sink.publish(messages)}
+                published = failed = 0
+                for row in rows:
+                    result = results.get(row.event_id, PublishResult(row.event_id, "no ack"))
+                    if result.ok:
+                        row.published_at = now
+                        published += 1
+                    else:
+                        row.attempts += 1
+                        row.last_error = (result.error or "")[:1000]
+                        row.next_attempt_at = now + backoff(row.attempts)
+                        failed += 1
+                        spans[row.event_id].set_status(StatusCode.ERROR, row.last_error)
+            finally:
+                for span in spans.values():
+                    span.end()
             if failed:
                 log.warning("outbox publish failures: %d of %d", failed, len(rows))
             return CycleStats(len(rows), published, failed)
@@ -135,14 +147,35 @@ class OutboxPublisher:
                 stop.wait(idle_wait_s)
 
 
-def _message(row: OutboxEventColumns) -> OutboundMessage:
+def _publish_span(row: OutboxEventColumns) -> Span:
+    return _tracer.start_span(
+        f"publish {row.topic}",
+        context=context_from(row.trace_context),
+        kind=SpanKind.PRODUCER,
+        attributes={
+            "messaging.system": "kafka",
+            "messaging.operation.type": "send",
+            "messaging.destination.name": row.topic,
+            "messaging.message.id": row.event_id,
+            "onramp.event_type": row.event_type,
+            "onramp.tenant_id": row.tenant_id,
+            "onramp.aggregate_id": row.aggregate_id,
+            "onramp.outbox.attempts": row.attempts,
+        },
+    )
+
+
+def _message(row: OutboxEventColumns, span: Span) -> OutboundMessage:
     envelope = EventEnvelope.model_validate(row.envelope)
+    headers = {"event_type": row.event_type, "schema_version": str(row.schema_version)}
+    # Consumers continue from this publish span, so the trace shows when the event left.
+    propagate.inject(headers, context=trace.set_span_in_context(span))
     return OutboundMessage(
         event_id=row.event_id,
         topic=row.topic,
         key=row.partition_key,
         value=envelope.to_json(),
-        headers={"event_type": row.event_type, "schema_version": str(row.schema_version)},
+        headers=headers,
     )
 
 

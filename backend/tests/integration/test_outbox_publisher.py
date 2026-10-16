@@ -98,7 +98,8 @@ def test_publishes_with_topic_key_headers_and_full_envelope(
     assert (stats.claimed, stats.published, stats.failed) == (1, 1, 0)
     (message,) = sink.delivered
     assert (message.topic, message.key) == ("onramp.cases", "case_1")
-    assert message.headers == {"event_type": "case.escalated", "schema_version": "1"}
+    assert message.headers["event_type"] == "case.escalated"
+    assert message.headers["schema_version"] == "1"
     assert EventEnvelope.from_json(message.value).event_id == event_id
     assert _unpublished(onramp_sessions) == []
 

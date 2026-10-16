@@ -61,6 +61,9 @@ class OutboxEventColumns:
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     last_error: Mapped[str | None] = mapped_column(Text)
+    # W3C trace context of the code that emitted the event, carried to Kafka headers so the
+    # publisher and consumers continue the same trace. Not part of the event contract.
+    trace_context: Mapped[dict[str, str] | None] = mapped_column(JSONB)
 
 
 class AggregateSequenceColumns:
