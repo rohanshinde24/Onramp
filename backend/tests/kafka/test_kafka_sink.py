@@ -1,6 +1,12 @@
 import uuid
 
-from onramp.events.kafka import KafkaSink, ensure_topics, producer_config
+from onramp.events.kafka import (
+    KafkaMessageSource,
+    KafkaSink,
+    consumer_config,
+    ensure_topics,
+    producer_config,
+)
 from onramp.events.publisher import OutboundMessage
 from tests.kafka.conftest import ReadTopic
 
@@ -62,3 +68,25 @@ def test_missing_topic_fails_within_the_delivery_timeout(bootstrap: str) -> None
     (result,) = sink.publish([missing])
 
     assert not result.ok
+
+
+def test_lag_counts_unconsumed_messages_before_any_partition_is_assigned(
+    bootstrap: str, fresh_topic: str
+) -> None:
+    sink = _sink(bootstrap)
+    sink.publish(
+        [
+            OutboundMessage(event_id=f"evt_{i}", topic=fresh_topic, key=f"k{i}", value=b"{}")
+            for i in range(5)
+        ]
+    )
+    source = KafkaMessageSource(
+        consumer_config(bootstrap, f"test-lag-{uuid.uuid4().hex[:8]}", "onramp-test"),
+        [fresh_topic],
+    )
+    try:
+        # Never polled, so the group has not assigned this member anything yet: the state a
+        # consumer is in while rebalancing or after losing its session in a broker outage.
+        assert source.lag() == 5
+    finally:
+        source.close()

@@ -57,7 +57,11 @@ def main() -> None:
 
     def report() -> None:
         counts = " ".join(f"{k.value}={v}" for k, v in runner.stats.counts.items())
-        lag = source.lag()
+        try:
+            lag = source.lag()
+        except Exception:
+            consumer_lag.clear({"group": handler.group})
+            raise
         consumer_lag.set(lag, {"group": handler.group})
         log.info("consumer group=%s lag=%d %s", handler.group, lag, counts)
 

@@ -99,6 +99,11 @@ class LatestValue:
     def set(self, value: float, attributes: Mapping[str, str]) -> None:
         self._values[tuple(sorted(attributes.items()))] = value
 
+    def clear(self, attributes: Mapping[str, str]) -> None:
+        """Stop reporting a series whose value can no longer be read, rather than repeat the
+        last one: a gap is visible on a dashboard, a frozen number is not."""
+        self._values.pop(tuple(sorted(attributes.items())), None)
+
     def _observe(self, _: CallbackOptions) -> list[Observation]:
         return [Observation(value, dict(key)) for key, value in list(self._values.items())]
 

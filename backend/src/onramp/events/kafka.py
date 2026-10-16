@@ -116,7 +116,8 @@ def consumer_config(bootstrap: str, group: str, client_id: str) -> dict[str, obj
 class KafkaMessageSource:
     def __init__(self, config: dict[str, object], topics: Sequence[str]) -> None:
         self._consumer = Consumer(config)
-        self._consumer.subscribe(list(topics))
+        self._topics = list(topics)
+        self._consumer.subscribe(self._topics)
 
     def poll(self, timeout_s: float) -> RawMessage | None:
         msg = self._consumer.poll(timeout_s)
@@ -149,13 +150,24 @@ class KafkaMessageSource:
         )
 
     def lag(self) -> int:
-        """Messages between this group's committed offsets and the log end, over assigned
-        partitions."""
-        assignment = self._consumer.assignment()
-        if not assignment:
+        """Messages between this group's committed offsets and the log end, over every
+        partition of the subscribed topics.
+
+        Not only the assigned ones: while the group is rebalancing or this member has lost its
+        session, the assignment is empty, and that is exactly when lag must not read as zero.
+        Raises when the broker cannot be reached, so a caller never reports a stale number.
+        """
+        metadata = self._consumer.list_topics(timeout=5)
+        partitions = [
+            TopicPartition(topic, partition)
+            for topic in self._topics
+            if topic in metadata.topics
+            for partition in metadata.topics[topic].partitions
+        ]
+        if not partitions:
             return 0
         total = 0
-        for tp in self._consumer.committed(assignment, timeout=5):
+        for tp in self._consumer.committed(partitions, timeout=5):
             _, high = self._consumer.get_watermark_offsets(tp, timeout=5, cached=False)
             committed = tp.offset if tp.offset >= 0 else 0
             total += max(high - committed, 0)

@@ -49,7 +49,12 @@ def main() -> None:
     runner = ConsumerRunner(make_session_factory(engine), source, dead_letters, handler)
 
     def report() -> None:
-        consumer_lag.set(source.lag(), {"group": handler.group})
+        try:
+            lag = source.lag()
+        except Exception:
+            consumer_lag.clear({"group": handler.group})
+            raise
+        consumer_lag.set(lag, {"group": handler.group})
 
     try:
         runner.run_until_stopped(stop_on_signals(), on_tick=report)
