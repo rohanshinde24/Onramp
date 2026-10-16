@@ -121,12 +121,15 @@ services:
     profiles: ["workflow", "app", "agent"]
     image: temporalio/temporal:1.9.1
     command:
-      ["server", "start-dev", "--ip", "0.0.0.0", "--db-filename", "/var/lib/temporal/temporal.db"]
+      ["server", "start-dev", "--ip", "0.0.0.0", "--db-filename", "/home/temporal/temporal.db"]
     ports:
       - "127.0.0.1:7233:7233"
       - "127.0.0.1:8233:8233"
     volumes:
-      - temporal-data:/var/lib/temporal
+      # The image runs as the temporal user and owns only its home directory. Mounting there
+      # lets Docker give a new volume that ownership; a fresh volume anywhere else is root's
+      # and the server cannot create its database.
+      - temporal-data:/home/temporal
     healthcheck:
       test: ["CMD", "temporal", "operator", "cluster", "health", "--address", "127.0.0.1:7233"]
       interval: 3s
