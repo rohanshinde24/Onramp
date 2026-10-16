@@ -136,10 +136,19 @@ class OutboxPublisher:
                 log.warning("outbox publish failures: %d of %d", failed, len(rows))
             return CycleStats(len(rows), published, failed)
 
-    def run_until_stopped(self, stop: threading.Event, idle_wait_s: float = 0.5) -> None:
+    def run_until_stopped(
+        self,
+        stop: threading.Event,
+        idle_wait_s: float = 0.5,
+        *,
+        heartbeat: Callable[[], None] | None = None,
+    ) -> None:
         """Publish until ``stop`` is set. A cycle in progress always completes, so SIGTERM never
-        leaves a half-marked batch; the next process resumes from committed state."""
+        leaves a half-marked batch; the next process resumes from committed state.
+        ``heartbeat`` runs once per cycle, failed cycles included."""
         while not stop.is_set():
+            if heartbeat is not None:
+                heartbeat()
             try:
                 stats = self.run_once()
             except Exception:

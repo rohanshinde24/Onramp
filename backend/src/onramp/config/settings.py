@@ -58,6 +58,9 @@ class Settings(BaseSettings):
 
     otel_exporter_otlp_endpoint: str | None = None
 
+    # Probe port for roles that do not serve HTTP. Unset on the host, where nothing probes.
+    health_port: int | None = Field(default=None, ge=1, le=65535)
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

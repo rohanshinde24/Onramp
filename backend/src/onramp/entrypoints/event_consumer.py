@@ -7,6 +7,7 @@ import onramp.models  # noqa: F401 - every table must be mapped before any sessi
 from onramp.cases.evidence_consumer import CaseEvidenceHandler
 from onramp.config import get_settings
 from onramp.db.engine import make_engine, make_session_factory
+from onramp.entrypoints.health import HealthEndpoint
 from onramp.entrypoints.signals import stop_on_signals
 from onramp.events.consumer import ConsumerRunner
 from onramp.events.kafka import (
@@ -54,7 +55,8 @@ def main() -> None:
     )
     runner = ConsumerRunner(make_session_factory(engine), source, dead_letters, handler)
     consumer_lag_age.mark({"group": handler.group})
-    stop = stop_on_signals()
+    endpoint = HealthEndpoint(settings.health_port)
+    stop = stop_on_signals(endpoint.health)
 
     def report() -> None:
         counts = " ".join(f"{k.value}={v}" for k, v in runner.stats.counts.items())
@@ -69,7 +71,11 @@ def main() -> None:
 
     log.info("event consumer started group=%s topics=%s", handler.group, ",".join(handler.topics))
     try:
-        runner.run_until_stopped(stop, on_tick=report, tick_interval_s=REPORT_INTERVAL_S)
+        with endpoint as health:
+            health.mark_ready()
+            runner.run_until_stopped(
+                stop, on_tick=report, tick_interval_s=REPORT_INTERVAL_S, heartbeat=health.beat
+            )
     finally:
         coordinator.close()
         engine.dispose()

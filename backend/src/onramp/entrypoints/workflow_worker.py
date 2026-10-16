@@ -7,13 +7,14 @@ import onramp.models  # noqa: F401 - configure every ORM mapper before the first
 from onramp.actions.evidence import EvidenceRequester
 from onramp.actions.gateway import ActionGateway
 from onramp.checks.service import CheckService
-from onramp.config import get_settings
+from onramp.config import Settings, get_settings
 from onramp.db.engine import make_engine, make_session_factory
+from onramp.entrypoints.health import HealthEndpoint, RoleHealth
 from onramp.entrypoints.temporal_worker import run_worker
 from onramp.marketplace.reader import SqlMarketplaceReader
 from onramp.marketplace.writer import SqlMarketplaceWriter
 from onramp.telemetry.logging import configure_logging
-from onramp.telemetry.setup import configure_telemetry, instrument_databases
+from onramp.telemetry.setup import Telemetry, configure_telemetry, instrument_databases
 from onramp.workflows.activities import WorkflowActivities
 from onramp.workflows.case import CaseWorkflow
 from onramp.workflows.client import TemporalCaseCoordinator
@@ -26,6 +27,13 @@ def main() -> None:
     settings = get_settings()
     configure_logging(settings.log_level)
     telemetry = configure_telemetry(settings, process_role="workflow-worker")
+    # Probes answer from the start: reconciliation below can take a while, and the startup
+    # probe waits on readiness for it.
+    with HealthEndpoint(settings.health_port) as health:
+        _run(settings, telemetry, health)
+
+
+def _run(settings: Settings, telemetry: Telemetry, health: RoleHealth) -> None:
     engine = make_engine(str(settings.database_url))
     marketplace_engine = make_engine(str(settings.marketplace_database_url))
     instrument_databases(engine, marketplace_engine)
@@ -64,6 +72,7 @@ def main() -> None:
                     activities.execute_approved_action,
                     activities.recover_action_verification,
                 ],
+                health=health,
             )
         )
     finally:

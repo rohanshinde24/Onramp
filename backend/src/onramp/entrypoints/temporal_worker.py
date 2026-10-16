@@ -14,6 +14,10 @@ from temporalio.contrib.opentelemetry import TracingInterceptor
 from temporalio.runtime import OpenTelemetryConfig, Runtime, TelemetryConfig
 from temporalio.worker import Worker
 
+from onramp.entrypoints.health import RoleHealth
+
+HEARTBEAT_INTERVAL_S = 5.0
+
 
 def _runtime(otlp_endpoint: str | None) -> Runtime | None:
     """Temporal's own worker metrics (poll and task latency, schedule-to-start, slots), sent to
@@ -40,13 +44,24 @@ async def run_worker(
     activities: Sequence[Callable[..., Any]],
     workflows: Sequence[type] = (),
     otlp_endpoint: str | None = None,
+    health: RoleHealth | None = None,
 ) -> None:
-    """Run one worker until SIGINT/SIGTERM, then drain in-flight activities."""
+    """Run one worker until SIGINT/SIGTERM, then drain in-flight activities.
+
+    ``health`` turns ready once the worker polls and beats from the event loop while it runs, so
+    a blocked loop fails liveness. Activities run on a thread pool and never block it.
+    """
+    health = health or RoleHealth()
     stop = asyncio.Event()
+
+    def on_signal() -> None:
+        health.mark_stopping()
+        stop.set()
+
     loop = asyncio.get_running_loop()
     for signum in (signal.SIGINT, signal.SIGTERM):
         with suppress(NotImplementedError):
-            loop.add_signal_handler(signum, stop.set)
+            loop.add_signal_handler(signum, on_signal)
 
     client = await Client.connect(
         address,
@@ -64,13 +79,26 @@ async def run_worker(
             graceful_shutdown_timeout=timedelta(seconds=20),
         )
         running = asyncio.create_task(worker.run())
+        beating = asyncio.create_task(_beat_while(running, health))
         waiting = asyncio.create_task(stop.wait())
-        done, _ = await asyncio.wait({running, waiting}, return_when=asyncio.FIRST_COMPLETED)
-        if waiting in done:
-            await worker.shutdown()
-            await running
-        else:
-            waiting.cancel()
+        try:
+            done, _ = await asyncio.wait({running, waiting}, return_when=asyncio.FIRST_COMPLETED)
+            if waiting in done:
+                await worker.shutdown()
+                await running
+            else:
+                waiting.cancel()
+                with suppress(asyncio.CancelledError):
+                    await waiting
+                await running
+        finally:
+            beating.cancel()
             with suppress(asyncio.CancelledError):
-                await waiting
-            await running
+                await beating
+
+
+async def _beat_while(running: asyncio.Task[None], health: RoleHealth) -> None:
+    health.mark_ready()
+    while not running.done():
+        health.beat()
+        await asyncio.sleep(HEARTBEAT_INTERVAL_S)

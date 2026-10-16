@@ -6,6 +6,7 @@ import sys
 import onramp.models  # noqa: F401 - configure every ORM mapper before the first query
 from onramp.config import get_settings
 from onramp.db.engine import make_engine, make_session_factory
+from onramp.entrypoints.health import HealthEndpoint
 from onramp.entrypoints.signals import stop_on_signals
 from onramp.events.consumer import ConsumerRunner
 from onramp.events.kafka import (
@@ -58,8 +59,12 @@ def main() -> None:
         consumer_lag.set(lag, {"group": handler.group})
         consumer_lag_age.mark({"group": handler.group})
 
+    endpoint = HealthEndpoint(settings.health_port)
+    stop = stop_on_signals(endpoint.health)
     try:
-        runner.run_until_stopped(stop_on_signals(), on_tick=report)
+        with endpoint as health:
+            health.mark_ready()
+            runner.run_until_stopped(stop, on_tick=report, heartbeat=health.beat)
     finally:
         coordinator.close()
         engine.dispose()

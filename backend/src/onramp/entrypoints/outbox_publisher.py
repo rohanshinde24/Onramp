@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 import onramp.models  # noqa: F401 - every table must be mapped before any session is used
 from onramp.config import get_settings
 from onramp.db.engine import make_engine, make_session_factory
+from onramp.entrypoints.health import HealthEndpoint
 from onramp.entrypoints.signals import stop_on_signals
 from onramp.events.kafka import KafkaSink, producer_config
 from onramp.events.models import OutboxEvent, OutboxEventColumns
@@ -51,7 +52,8 @@ def main() -> None:
             settings.kafka_delivery_timeout_ms,
         )
     )
-    stop = stop_on_signals()
+    endpoint = HealthEndpoint(settings.health_port)
+    stop = stop_on_signals(endpoint.health)
 
     def report_backlog() -> None:
         while not stop.wait(BACKLOG_REPORT_INTERVAL_S):
@@ -73,7 +75,11 @@ def main() -> None:
     reporter.start()
     log.info("outbox publisher started source=%s", source)
     try:
-        OutboxPublisher(sessions, sink, outbox=outbox).run_until_stopped(stop)
+        with endpoint as health:
+            health.mark_ready()
+            OutboxPublisher(sessions, sink, outbox=outbox).run_until_stopped(
+                stop, heartbeat=health.beat
+            )
     finally:
         sink.close()
         engine.dispose()

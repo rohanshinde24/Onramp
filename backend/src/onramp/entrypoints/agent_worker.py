@@ -11,6 +11,7 @@ import onramp.models  # noqa: F401 - configure every ORM mapper before the first
 from onramp.agent.anthropic_model import AnthropicChatModel
 from onramp.config import get_settings
 from onramp.db.engine import make_engine, make_session_factory
+from onramp.entrypoints.health import HealthEndpoint
 from onramp.entrypoints.temporal_worker import run_worker
 from onramp.investigations.service import InvestigationService
 from onramp.marketplace.reader import SqlMarketplaceReader
@@ -48,15 +49,17 @@ def main() -> None:
     )
     log.info("agent worker started queue=%s", settings.temporal_agent_task_queue)
     try:
-        asyncio.run(
-            run_worker(
-                address=settings.temporal_address,
-                namespace=settings.temporal_namespace,
-                otlp_endpoint=settings.otel_exporter_otlp_endpoint,
-                task_queue=settings.temporal_agent_task_queue,
-                activities=[activities.run_investigation],
+        with HealthEndpoint(settings.health_port) as health:
+            asyncio.run(
+                run_worker(
+                    address=settings.temporal_address,
+                    namespace=settings.temporal_namespace,
+                    otlp_endpoint=settings.otel_exporter_otlp_endpoint,
+                    task_queue=settings.temporal_agent_task_queue,
+                    activities=[activities.run_investigation],
+                    health=health,
+                )
             )
-        )
     finally:
         log.info("agent worker stopped")
         search.close()

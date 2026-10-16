@@ -173,12 +173,16 @@ class ConsumerRunner:
         on_tick: Callable[[], None] | None = None,
         tick_interval_s: float = 15.0,
         monotonic: Callable[[], float] = time.monotonic,
+        heartbeat: Callable[[], None] | None = None,
     ) -> None:
         """Poll and process until ``stop`` is set. ``on_tick`` runs on this same thread every
-        ``tick_interval_s``, so it can query the consumer without cross-thread access."""
+        ``tick_interval_s``, so it can query the consumer without cross-thread access.
+        ``heartbeat`` runs once per poll, so a liveness probe sees a wedged loop."""
         next_tick = monotonic() + tick_interval_s
         try:
             while not stop.is_set():
+                if heartbeat is not None:
+                    heartbeat()
                 message = self._source.poll(poll_timeout_s)
                 if message is not None:
                     self.process(message)
