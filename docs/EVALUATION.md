@@ -216,6 +216,10 @@ models on the judgment suite").
   Promptfoo model by prompt matrix, using the Node version in `.nvmrc` with telemetry off. Its provider
   replays stored outcomes, so the view never calls a model; it agrees case for case with
   `make compare`.
+* **Console view.** The operator console's Evaluations page lists every stored run and committed
+  baseline by suite with its headline measures, and opens a run to show each scenario's expected
+  and actual outcome, citations, faults and recorded limitations. It reads the same artifacts,
+  read-only.
 
 Run it with:
 

@@ -10,7 +10,7 @@ approver.
 
 ## Status
 
-Phases 0 through 16 are complete. What works today:
+Phases 0 through 17 are complete. What works today:
 
 * tenants, users and roles, with bearer-token authentication whose role is always read from
   the database
@@ -45,8 +45,12 @@ Phases 0 through 16 are complete. What works today:
   92-case judgment suite, with a required spending cap, recorded answers replayed for free,
   optional half-price batch runs, DuckDB comparison with a regression gate against stored
   baselines, and a Promptfoo matrix view (results in `docs/BENCHMARKS.md`)
+* an operator console: an inbox split by what each case needs from a person, and a case page
+  with the decision, investigation trajectory, checks, the policy version in force with every
+  cited passage, the marketplace evidence, approvals, gateway results and the audit timeline;
+  plus a view of stored evaluation runs
 
-Not built yet: the real operator console, full observability, Kubernetes packaging, final scale
+Not built yet: full observability, Kubernetes packaging, final scale
 benchmarks, and AWS staging. The reference, adversarial and fault suites use
 scripted investigations and measure the application; the judgment suite measures real models.
 
@@ -85,8 +89,16 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8000/cases
 
 OpenAPI docs are at `localhost:8000/docs`.
 
-Frontend:
+Operator console (Node 22 from `.nvmrc`; the API on port 8000, and Temporal plus the workflow
+worker if cases should move on their own):
 
 ```sh
-cd frontend && npm ci && npm run dev
+docker compose --profile workflow up -d --build --wait   # Temporal and the workflow worker
+docker compose --profile app up -d --build --wait api
+cd frontend && nvm use && npm ci && npm run dev
 ```
+
+Open `localhost:3000` and sign in with a token from
+`backend/.venv/bin/onramp-dev-token acme acme_operator` (or `acme_lead` to approve payouts).
+Set `ONRAMP_API_URL` if the API is elsewhere. `npm test`, `npm run lint`, `npm run typecheck`
+and `npm run build` are the console's checks.

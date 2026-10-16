@@ -4,7 +4,7 @@ This log records material differences between the original phased implementation
 system that was actually built. It is not a defect list. Some changes closed correctness gaps;
 others are explicit local-development compromises or deferred production work.
 
-Last reviewed: 2026-10-15 at commit `89bc467`.
+Last reviewed: 2026-10-16 at Phase 17.
 
 ## Correctness changes discovered during implementation
 
@@ -180,6 +180,27 @@ The scenario format also gained `subject_id` (what the reporter names) and an op
 * The live smoke test found two defects scripted tests could not: conclusion reason codes the
   proposal schema rejected (now constrained in the conclusion schema, with escalation instead
   of a crash), and retries counting their own replayed answers as cost.
+
+## Phase 17 adaptations
+
+* The console holds the bearer token on its own server and signs in with a pasted token. There
+  is no identity provider yet; a deployed console needs one (ADR-012).
+* Next.js Cache Components are off. Every console page is per-user, authoritative state read
+  at request time, so there is nothing to prerender and nothing that may be served stale.
+* The evaluation view reads artifacts from disk on the console's server rather than through
+  the API, so evaluation data stays off the application's read path (ADR-009, ADR-012).
+* The reachability walk from a case to its marketplace records moved from the Action Gateway
+  into `cases.evidence`, so the console's evidence view and the gateway's evidence check share
+  one definition.
+* Running the whole stack for the console found two defects. A fresh Temporal volume was owned
+  by root while the dev server runs as its own user, so the workflow profile could not start on
+  a new machine; the volume now mounts at that user's home. And every evaluation manifest,
+  including live-model runs, said investigations were scripted; live runs now say what they
+  are. The two live baselines stored before the fix keep their original manifests, and the
+  console flags the wrong line on them.
+* Deferred: an automated browser test of the console against a running API (verified by hand
+  for this phase), an assignee filter in the inbox (nothing assigns cases yet), queue counts
+  above 100, and an admin view of audit history across cases (admins see each case's timeline).
 
 ## Deferred evaluation work
 

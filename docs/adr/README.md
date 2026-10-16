@@ -16,3 +16,4 @@ superseded by a new record, never edited to reverse its decision.
 | [009](009-eval-artifacts.md) | Evaluation artifact format | Accepted |
 | [010](010-process-roles-and-kubernetes.md) | Process roles now, Kubernetes at Phase 19 | Accepted |
 | [011](011-dense-policy-retrieval.md) | Dense retrieval as the default policy retriever | Accepted |
+| [012](012-operator-console.md) | Operator console as a server-rendered client of the API | Accepted |

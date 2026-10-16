@@ -125,6 +125,15 @@ import-linter contract in CI enforces both rules.
 7. Waiting for evidence works the same way: the event consumer turns `evidence.uploaded` into
    an `evidence_arrived` signal carrying only the event ID; the workflow re-reads state.
 
+## Operator console
+
+The console in `frontend/` is a Next.js app whose server renders every page from the API and
+runs every write as a server action against it. The bearer token stays in an httpOnly cookie on
+the console's server; the browser never calls the API. Nothing is cached, and every write
+carries the case version or proposal content hash the page showed, so a stale page is refused
+rather than acted on. Controls follow role and state, but enforcement stays in the API. The
+evaluation view reads run artifacts from disk, never through the API. See ADR-012.
+
 ## Data ownership
 
 | Store | Owns | Never used for |
@@ -196,3 +205,4 @@ See ADR-010.
 | 009 | Evaluation artifacts: JSONL canonical, Parquet for DuckDB |
 | 010 | Process roles now, Kubernetes at Phase 19 |
 | 011 | Dense retrieval as the default policy retriever |
+| 012 | Operator console as a server-rendered client of the API |
