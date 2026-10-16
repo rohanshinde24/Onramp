@@ -5,8 +5,9 @@ instead, so each one beats a ``RoleHealth`` from that loop and, when ``HEALTH_PO
 serves it on a small HTTP server for Kubernetes probes:
 
 * ``/healthz`` fails only when the loop has stopped beating, which means the process is wedged
-  and a restart helps. A dependency outage does not stop the loop (failures are logged and the
-  loop goes round again), so an outage never gets a pod restarted.
+  and a restart helps. A dependency that refuses or errors does not stop the loop (failures are
+  logged and the loop goes round again), so such an outage never gets a pod restarted. A call
+  into a dependency that hangs does stop it, and then the restart replaces the stuck connection.
 * ``/readyz`` succeeds once the role has finished starting and until it begins to shut down.
   Nothing routes traffic to these roles; readiness is what a rolling update waits for before it
   stops an old pod.
