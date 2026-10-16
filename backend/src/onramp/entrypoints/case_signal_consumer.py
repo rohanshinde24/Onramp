@@ -15,7 +15,7 @@ from onramp.events.kafka import (
     producer_config,
 )
 from onramp.telemetry.logging import configure_logging
-from onramp.telemetry.metrics import consumer_lag
+from onramp.telemetry.metrics import consumer_lag, consumer_lag_age
 from onramp.telemetry.setup import configure_telemetry, instrument_databases
 from onramp.workflows.client import TemporalCaseCoordinator
 from onramp.workflows.event_handler import CaseSignalHandler
@@ -47,6 +47,7 @@ def main() -> None:
         producer_config(bootstrap, f"{client_id}-dlq", settings.kafka_delivery_timeout_ms)
     )
     runner = ConsumerRunner(make_session_factory(engine), source, dead_letters, handler)
+    consumer_lag_age.mark({"group": handler.group})
 
     def report() -> None:
         try:
@@ -55,6 +56,7 @@ def main() -> None:
             consumer_lag.clear({"group": handler.group})
             raise
         consumer_lag.set(lag, {"group": handler.group})
+        consumer_lag_age.mark({"group": handler.group})
 
     try:
         runner.run_until_stopped(stop_on_signals(), on_tick=report)

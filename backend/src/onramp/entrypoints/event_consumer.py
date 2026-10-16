@@ -17,7 +17,7 @@ from onramp.events.kafka import (
 )
 from onramp.marketplace.reader import SqlMarketplaceReader
 from onramp.telemetry.logging import configure_logging
-from onramp.telemetry.metrics import consumer_lag
+from onramp.telemetry.metrics import consumer_lag, consumer_lag_age
 from onramp.telemetry.setup import configure_telemetry, instrument_databases
 from onramp.workflows.client import TemporalCaseCoordinator
 
@@ -53,6 +53,7 @@ def main() -> None:
         producer_config(bootstrap, f"{client_id}-dlq", settings.kafka_delivery_timeout_ms)
     )
     runner = ConsumerRunner(make_session_factory(engine), source, dead_letters, handler)
+    consumer_lag_age.mark({"group": handler.group})
     stop = stop_on_signals()
 
     def report() -> None:
@@ -63,6 +64,7 @@ def main() -> None:
             consumer_lag.clear({"group": handler.group})
             raise
         consumer_lag.set(lag, {"group": handler.group})
+        consumer_lag_age.mark({"group": handler.group})
         log.info("consumer group=%s lag=%d %s", handler.group, lag, counts)
 
     log.info("event consumer started group=%s topics=%s", handler.group, ",".join(handler.topics))

@@ -44,9 +44,11 @@ panels = [
     panel("Gateway p95 duration", [p95("onramp_gateway_duration_seconds", "outcome")], 8, 10, unit="s"),
     panel("Marketplace write attempts", [f"sum by (action_type, result) (rate(onramp_marketplace_write_attempts_total{RATE}))"], 16, 10, unit="ops"),
     row("Events", 18),
-    panel("Outbox backlog", ["sum by (source) (onramp_outbox_backlog)"], 0, 19),
+    panel("Outbox backlog", ["max by (source) (onramp_outbox_backlog)"], 0, 19),
     panel("Oldest unpublished event", ["max by (source) (onramp_outbox_oldest_age_seconds)"], 8, 19, unit="s"),
-    panel("Consumer lag", ["max by (group) (onramp_consumer_lag)"], 16, 19),
+    panel("Consumer lag", ["max by (group) (onramp_consumer_lag)"], 16, 19, w=4),
+    # Lag can only be read through the group coordinator; when it cannot, this keeps growing.
+    panel("Lag reading age", ["max by (group) (onramp_consumer_lag_age_seconds)"], 20, 19, unit="s", w=4),
     panel("Consumed messages by outcome", [f"sum by (group, outcome) (rate(onramp_consumer_messages_total{RATE}))"], 0, 27, unit="ops"),
     panel("Consumer p95 processing time", [p95("onramp_consumer_duration_seconds", "group")], 8, 27, unit="s"),
     panel("Outbox sends and failures", [f"sum by (topic) (rate(onramp_outbox_published_total{RATE}))", f"sum by (topic) (rate(onramp_outbox_publish_failures_total{RATE}))"], 16, 27, unit="ops", legend={0: "sent {{topic}}", 1: "failed {{topic}}"}),

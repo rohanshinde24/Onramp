@@ -8,6 +8,7 @@ that stages them inside a database transaction calls ``record_on_commit`` and th
 only if that transaction commits.
 """
 
+import time
 from collections.abc import Mapping
 from typing import Any
 
@@ -116,6 +117,33 @@ outbox_oldest_age = LatestValue(
 )
 consumer_lag = LatestValue(
     "onramp.consumer.lag", "{message}", "Messages behind the end of the subscribed partitions"
+)
+
+
+class LastSuccess:
+    """Seconds since something last succeeded, observed at export time.
+
+    A gauge that stops reporting still shows its last value in Prometheus for its five-minute
+    lookback. This one keeps reporting while reads fail, and grows, so "lag is unknown" is a
+    number a dashboard and an alert can see.
+    """
+
+    def __init__(self, name: str, description: str) -> None:
+        self._at: dict[tuple[tuple[str, str], ...], float] = {}
+        _meter.create_observable_gauge(
+            name, callbacks=[self._observe], unit="s", description=description
+        )
+
+    def mark(self, attributes: Mapping[str, str]) -> None:
+        self._at[tuple(sorted(attributes.items()))] = time.monotonic()
+
+    def _observe(self, _: CallbackOptions) -> list[Observation]:
+        now = time.monotonic()
+        return [Observation(now - at, dict(key)) for key, at in list(self._at.items())]
+
+
+consumer_lag_age = LastSuccess(
+    "onramp.consumer.lag.age", "Seconds since this consumer last read its lag successfully"
 )
 
 _PENDING = "onramp.pending_metrics"
