@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from onramp.events.envelope import EventEnvelope
 from onramp.events.models import OutboxEvent, OutboxEventColumns
+from onramp.telemetry.metrics import outbox_publish_failures, outbox_published
 from onramp.telemetry.propagation import context_from
 
 log = logging.getLogger(__name__)
@@ -120,11 +121,13 @@ class OutboxPublisher:
                     if result.ok:
                         row.published_at = now
                         published += 1
+                        outbox_published.add(1, {"topic": row.topic})
                     else:
                         row.attempts += 1
                         row.last_error = (result.error or "")[:1000]
                         row.next_attempt_at = now + backoff(row.attempts)
                         failed += 1
+                        outbox_publish_failures.add(1, {"topic": row.topic})
                         spans[row.event_id].set_status(StatusCode.ERROR, row.last_error)
             finally:
                 for span in spans.values():

@@ -10,6 +10,7 @@ import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
 
+from opentelemetry import trace
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
@@ -32,8 +33,14 @@ from onramp.db.types import new_id
 from onramp.marketplace.reader import MarketplaceReader
 from onramp.policy.search import PolicyRetriever
 from onramp.proposals.service import InvalidProposalError, create_proposal
+from onramp.telemetry.metrics import (
+    investigation_duration,
+    investigation_runs,
+    investigation_tokens,
+)
 
 log = logging.getLogger(__name__)
+_tracer = trace.get_tracer("onramp.investigations")
 Clock = Callable[[], datetime]
 
 
@@ -66,6 +73,40 @@ class InvestigationService:
         self._clock = clock
 
     def run(self, tenant_id: str, case_id: str, actor: Actor) -> InvestigationRun:
+        with _tracer.start_as_current_span(
+            "investigation",
+            attributes={
+                "onramp.case_id": case_id,
+                "onramp.tenant_id": tenant_id,
+                "onramp.prompt_version": self._prompt_version,
+            },
+        ) as span:
+            run = self._run(tenant_id, case_id, actor)
+            attributes = {
+                "status": run.status,
+                "model": run.model_name,
+                "prompt_version": run.prompt_version,
+            }
+            span.set_attributes(
+                {
+                    "onramp.investigation.status": run.status,
+                    "onramp.model": run.model_name,
+                    "onramp.model_calls": run.model_calls,
+                    "onramp.tokens.input": run.input_tokens,
+                    "onramp.tokens.output": run.output_tokens,
+                }
+            )
+            investigation_runs.add(1, attributes)
+            investigation_duration.record(run.elapsed_s, attributes)
+            investigation_tokens.add(
+                run.input_tokens, {"direction": "input", "model": run.model_name}
+            )
+            investigation_tokens.add(
+                run.output_tokens, {"direction": "output", "model": run.model_name}
+            )
+            return run
+
+    def _run(self, tenant_id: str, case_id: str, actor: Actor) -> InvestigationRun:
         with self._sessions() as session:
             case = get_case(session, tenant_id, case_id)
             if case.state != CaseState.INVESTIGATING:

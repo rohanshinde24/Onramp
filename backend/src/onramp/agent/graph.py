@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
+from opentelemetry import trace
+from opentelemetry.trace import SpanKind, StatusCode
 from pydantic import ValidationError
 
 from onramp.agent.conclusion import AgentConclusion, Observations, validate_conclusion
@@ -32,8 +34,12 @@ from onramp.agent.model import (
 from onramp.agent.prompts import DEFAULT_PROMPT_VERSION, NUDGE, system_prompt
 from onramp.agent.tools import CaseToolbox
 from onramp.cases.models import CaseType
+from onramp.telemetry.metrics import model_call_duration
 
 SUBMIT = "submit_conclusion"
+
+
+_tracer = trace.get_tracer("onramp.agent")
 
 
 @dataclass(frozen=True)
@@ -114,12 +120,39 @@ def investigate(
     def model_node(state: State) -> dict[str, Any]:
         if over_budget(state):
             return {"status": "budget_exhausted"}
-        try:
-            response = model.respond(system, state["transcript"], tools)
-        except ModelUnavailableError as exc:
-            return {"status": "model_error", "problems": [str(exc)]}
-        except ModelRefusedError as exc:
-            return {"status": "model_refused", "problems": [str(exc)]}
+        model_name = model.name
+        began = time.perf_counter()
+        with _tracer.start_as_current_span(
+            "model.call",
+            kind=SpanKind.CLIENT,
+            attributes={
+                "gen_ai.request.model": model_name,
+                "onramp.step": state["model_calls"] + 1,
+            },
+        ) as span:
+            try:
+                response = model.respond(system, state["transcript"], tools)
+            except ModelUnavailableError as exc:
+                span.set_status(StatusCode.ERROR, "model unavailable")
+                model_call_duration.record(
+                    time.perf_counter() - began, {"model": model_name, "result": "unavailable"}
+                )
+                return {"status": "model_error", "problems": [str(exc)]}
+            except ModelRefusedError as exc:
+                span.set_status(StatusCode.ERROR, "model refused")
+                model_call_duration.record(
+                    time.perf_counter() - began, {"model": model_name, "result": "refused"}
+                )
+                return {"status": "model_refused", "problems": [str(exc)]}
+            span.set_attributes(
+                {
+                    "gen_ai.usage.input_tokens": response.usage.input_tokens,
+                    "gen_ai.usage.output_tokens": response.usage.output_tokens,
+                }
+            )
+        model_call_duration.record(
+            time.perf_counter() - began, {"model": model_name, "result": "ok"}
+        )
         message = Message(
             "assistant", text=response.text, tool_calls=response.tool_calls, raw=response.raw
         )

@@ -9,6 +9,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from opentelemetry import trace
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -33,6 +34,7 @@ from onramp.identity.principal import Principal
 from onramp.identity.roles import Permission, Role
 from onramp.marketplace.reader import MarketplaceReader
 from onramp.telemetry.logging import log_context
+from onramp.telemetry.metrics import case_transitions, record_on_commit
 
 Clock = Callable[[], datetime]
 log = logging.getLogger(__name__)
@@ -330,6 +332,16 @@ def transition(
             correlation_id=correlation_id,
             causation_id=causation_id,
         )
+    record_on_commit(
+        session,
+        case_transitions,
+        1,
+        {"case_type": case.case_type, "from": current.value, "to": target.value, "reason": reason},
+    )
+    trace.get_current_span().add_event(
+        "case.transitioned",
+        {"onramp.case_id": case.id, "from": current.value, "to": target.value, "reason": reason},
+    )
     # Staged in the caller's transaction; the audit row is the record of whether it committed.
     with log_context(case_id=case.id, tenant_id=case.tenant_id):
         log.info("case transition staged %s -> %s reason=%s", current.value, target.value, reason)

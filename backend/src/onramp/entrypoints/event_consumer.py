@@ -17,6 +17,7 @@ from onramp.events.kafka import (
 )
 from onramp.marketplace.reader import SqlMarketplaceReader
 from onramp.telemetry.logging import configure_logging
+from onramp.telemetry.metrics import consumer_lag
 from onramp.telemetry.setup import configure_telemetry, instrument_databases
 from onramp.workflows.client import TemporalCaseCoordinator
 
@@ -56,7 +57,9 @@ def main() -> None:
 
     def report() -> None:
         counts = " ".join(f"{k.value}={v}" for k, v in runner.stats.counts.items())
-        log.info("consumer group=%s lag=%d %s", handler.group, source.lag(), counts)
+        lag = source.lag()
+        consumer_lag.set(lag, {"group": handler.group})
+        log.info("consumer group=%s lag=%d %s", handler.group, lag, counts)
 
     log.info("event consumer started group=%s topics=%s", handler.group, ",".join(handler.topics))
     try:

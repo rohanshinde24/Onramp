@@ -19,6 +19,8 @@ from onramp.events.models import OutboxEvent, OutboxEventColumns
 from onramp.events.publisher import OutboxPublisher, outbox_backlog
 from onramp.marketplace.events import MARKETPLACE_OUTBOX_TABLE
 from onramp.telemetry.logging import configure_logging
+from onramp.telemetry.metrics import outbox_backlog as outbox_backlog_gauge
+from onramp.telemetry.metrics import outbox_oldest_age
 from onramp.telemetry.setup import configure_telemetry, instrument_databases
 
 log = logging.getLogger("onramp.outbox_publisher")
@@ -56,6 +58,8 @@ def main() -> None:
             try:
                 with sessions() as session:
                     backlog = outbox_backlog(session, datetime.now(UTC), outbox)
+                outbox_backlog_gauge.set(backlog.count, {"source": source})
+                outbox_oldest_age.set(backlog.oldest_age_s, {"source": source})
                 log.info(
                     "outbox backlog source=%s count=%d oldest_age_s=%.1f",
                     source,

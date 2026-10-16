@@ -11,7 +11,26 @@ from typing import Any
 from opentelemetry import trace
 from temporalio.client import Client
 from temporalio.contrib.opentelemetry import TracingInterceptor
+from temporalio.runtime import OpenTelemetryConfig, Runtime, TelemetryConfig
 from temporalio.worker import Worker
+
+
+def _runtime(otlp_endpoint: str | None, task_queue: str) -> Runtime | None:
+    """Temporal's own worker metrics (poll and task latency, schedule-to-start, slots), sent to
+    the same collector as Onramp's. Without an endpoint the SDK default runtime is used."""
+    if not otlp_endpoint:
+        return None
+    return Runtime(
+        telemetry=TelemetryConfig(
+            metrics=OpenTelemetryConfig(
+                url=f"{otlp_endpoint.rstrip('/')}/v1/metrics",
+                http=True,
+                metric_periodicity=timedelta(seconds=10),
+                durations_as_seconds=True,
+            ),
+            global_tags={"onramp_task_queue": task_queue},
+        )
+    )
 
 
 async def run_worker(
@@ -21,6 +40,7 @@ async def run_worker(
     task_queue: str,
     activities: Sequence[Callable[..., Any]],
     workflows: Sequence[type] = (),
+    otlp_endpoint: str | None = None,
 ) -> None:
     """Run one worker until SIGINT/SIGTERM, then drain in-flight activities."""
     stop = asyncio.Event()
@@ -33,6 +53,7 @@ async def run_worker(
         address,
         namespace=namespace,
         interceptors=[TracingInterceptor(trace.get_tracer("onramp.temporal"))],
+        runtime=_runtime(otlp_endpoint, task_queue),
     )
     with ThreadPoolExecutor(thread_name_prefix=f"{task_queue}-activity") as executor:
         worker = Worker(

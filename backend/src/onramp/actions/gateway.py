@@ -1,10 +1,13 @@
 """Deterministic execution of approved marketplace actions (ADR-008)."""
 
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from opentelemetry import trace
+from opentelemetry.trace import SpanKind, StatusCode
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
@@ -33,8 +36,14 @@ from onramp.marketplace.writer import MarketplaceError, MarketplaceWriter
 from onramp.policy.applicability import NoApplicablePolicyError
 from onramp.proposals.content import ACTION_PARAMS, content_hash
 from onramp.proposals.models import Proposal, ProposalStatus
+from onramp.telemetry.metrics import (
+    gateway_duration,
+    gateway_executions,
+    marketplace_write_attempts,
+)
 
 Clock = Callable[[], datetime]
+_tracer = trace.get_tracer("onramp.actions")
 
 _APPROVAL_PERMISSION = {
     "medium": Permission.APPROVE_MEDIUM_RISK,
@@ -93,6 +102,42 @@ class ActionGateway:
         self._unknown_outcome_attempts = unknown_outcome_attempts
 
     def execute(self, tenant_id: str, proposal_id: str) -> ExecutedAction:
+        with _tracer.start_as_current_span(
+            "gateway.execute",
+            attributes={"onramp.tenant_id": tenant_id, "onramp.proposal_id": proposal_id},
+        ) as span:
+            started = time.perf_counter()
+            outcome = "error"
+            try:
+                action = self._execute(tenant_id, proposal_id)
+                outcome = action.status
+                span.set_attributes(
+                    {
+                        "onramp.case_id": action.case_id,
+                        "onramp.action_type": action.action_type,
+                        "onramp.idempotency_key": action.idempotency_key,
+                    }
+                )
+                return action
+            except GatewayRejectedError as exc:
+                outcome = "rejected"
+                span.set_attribute("onramp.gateway.rejection", exc.code)
+                raise
+            except PostconditionFailedError:
+                outcome = ExecutionStatus.UNVERIFIED.value
+                raise
+            except ActionExecutionFailedError:
+                outcome = ExecutionStatus.FAILED.value
+                raise
+            except OutcomeUnknownError:
+                outcome = "outcome_unknown"
+                raise
+            finally:
+                span.set_attribute("onramp.gateway.outcome", outcome)
+                gateway_executions.add(1, {"outcome": outcome})
+                gateway_duration.record(time.perf_counter() - started, {"outcome": outcome})
+
+    def _execute(self, tenant_id: str, proposal_id: str) -> ExecutedAction:
         try:
             prepared, completed = self._prepare(tenant_id, proposal_id)
         except GatewayRejectedError as exc:
@@ -428,32 +473,55 @@ class ActionGateway:
         return {"worker_id": case.worker_id, **expected}
 
     def _call_marketplace(self, prepared: _Prepared) -> Record:
+        attributes = {"action_type": prepared.action_type.value}
         for attempt in range(self._unknown_outcome_attempts):
-            try:
-                request = prepared.request
-                if prepared.action_type is ActionType.PAYOUT_ADJUSTMENT:
-                    return self._writer.issue_adjustment(
-                        prepared.tenant_id,
-                        str(request["worker_id"]),
-                        int(request["amount_cents"]),
-                        str(request["currency"]),
-                        idempotency_key=prepared.idempotency_key,
-                    )
-                if prepared.action_type is ActionType.ACTIVATE_WORKER:
-                    return self._writer.activate_worker(
-                        prepared.tenant_id,
-                        str(request["worker_id"]),
-                        idempotency_key=prepared.idempotency_key,
-                    )
-                return self._writer.overturn_review(
-                    prepared.tenant_id,
-                    str(request["review_id"]),
-                    idempotency_key=prepared.idempotency_key,
-                )
-            except OutcomeUnknownError:
-                if attempt + 1 == self._unknown_outcome_attempts:
+            with _tracer.start_as_current_span(
+                "marketplace.write",
+                kind=SpanKind.CLIENT,
+                attributes={
+                    "onramp.action_type": prepared.action_type.value,
+                    "onramp.idempotency_key": prepared.idempotency_key,
+                    "onramp.attempt": attempt + 1,
+                },
+            ) as span:
+                try:
+                    result = self._write(prepared)
+                except OutcomeUnknownError as exc:
+                    span.set_status(StatusCode.ERROR, "outcome unknown")
+                    span.record_exception(exc)
+                    marketplace_write_attempts.add(1, {**attributes, "result": "outcome_unknown"})
+                    if attempt + 1 == self._unknown_outcome_attempts:
+                        raise
+                    continue
+                except MarketplaceError:
+                    marketplace_write_attempts.add(1, {**attributes, "result": "rejected"})
                     raise
+                marketplace_write_attempts.add(1, {**attributes, "result": "ok"})
+                return result
         raise AssertionError("unreachable")
+
+    def _write(self, prepared: _Prepared) -> Record:
+        """One marketplace write under the action's idempotency key."""
+        request = prepared.request
+        if prepared.action_type is ActionType.PAYOUT_ADJUSTMENT:
+            return self._writer.issue_adjustment(
+                prepared.tenant_id,
+                str(request["worker_id"]),
+                int(request["amount_cents"]),
+                str(request["currency"]),
+                idempotency_key=prepared.idempotency_key,
+            )
+        if prepared.action_type is ActionType.ACTIVATE_WORKER:
+            return self._writer.activate_worker(
+                prepared.tenant_id,
+                str(request["worker_id"]),
+                idempotency_key=prepared.idempotency_key,
+            )
+        return self._writer.overturn_review(
+            prepared.tenant_id,
+            str(request["review_id"]),
+            idempotency_key=prepared.idempotency_key,
+        )
 
     def _postcondition(self, prepared: _Prepared, result: Record) -> bool:
         request = prepared.request

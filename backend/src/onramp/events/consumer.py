@@ -34,6 +34,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from onramp.events.envelope import EventEnvelope
 from onramp.events.models import ProcessedEvent
 from onramp.telemetry.logging import log_context
+from onramp.telemetry.metrics import consumer_duration, consumer_messages
 from onramp.telemetry.propagation import context_from, decode_headers
 
 log = logging.getLogger(__name__)
@@ -134,6 +135,7 @@ class ConsumerRunner:
                 "onramp.event_type": headers.get("event_type", ""),
             },
         ) as span:
+            began = time.perf_counter()
             outcome = self._outcome(message)
             span.set_attribute("onramp.consumer.outcome", outcome.value)
             # The post-commit hook (a Temporal signal) runs inside this span, so the workflow
@@ -141,6 +143,13 @@ class ConsumerRunner:
             self._after_commit(message, outcome)
             self._source.commit(message)
             self.stats.add(outcome)
+            attributes = {
+                "group": self._handler.group,
+                "event_type": headers.get("event_type", "unknown"),
+                "outcome": outcome.value,
+            }
+            consumer_messages.add(1, attributes)
+            consumer_duration.record(time.perf_counter() - began, attributes)
             return outcome
 
     def _after_commit(self, message: RawMessage, outcome: Outcome) -> None:

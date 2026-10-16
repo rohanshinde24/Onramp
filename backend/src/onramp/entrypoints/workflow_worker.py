@@ -53,6 +53,7 @@ def main() -> None:
             run_worker(
                 address=settings.temporal_address,
                 namespace=settings.temporal_namespace,
+                otlp_endpoint=settings.otel_exporter_otlp_endpoint,
                 task_queue=settings.temporal_workflow_task_queue,
                 workflows=[CaseWorkflow],
                 activities=[

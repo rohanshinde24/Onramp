@@ -26,6 +26,7 @@ from onramp.identity.principal import Principal
 from onramp.identity.roles import Permission
 from onramp.proposals.models import Proposal, ProposalStatus
 from onramp.proposals.service import ProposalNotFoundError, over_payout_limit
+from onramp.telemetry.metrics import approval_decisions, record_on_commit
 
 Clock = Callable[[], datetime]
 
@@ -136,6 +137,12 @@ class ApprovalService:
             )
             session.add(approval)
             session.flush()
+            record_on_commit(
+                session,
+                approval_decisions,
+                1,
+                {"decision": decision.value, "risk_class": risk.value, "action_type": action_type},
+            )
             record_audit(
                 session,
                 tenant_id=case.tenant_id,

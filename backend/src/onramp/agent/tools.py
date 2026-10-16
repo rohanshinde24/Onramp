@@ -7,17 +7,22 @@ Worker-supplied text is returned under ``untrusted_text`` so it is never mistake
 instructions. No tool writes anything.
 """
 
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
+from opentelemetry import trace
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from onramp.cases.models import CaseType
 from onramp.marketplace.reader import MarketplaceReader
 from onramp.marketplace.records import Record
 from onramp.policy.search import PolicyRetriever, RetrievedPassage
+from onramp.telemetry.metrics import retrieval_duration, tool_calls
+
+_tracer = trace.get_tracer("onramp.agent")
 
 
 @dataclass(frozen=True)
@@ -114,6 +119,18 @@ class CaseToolbox:
         return [spec for spec, _ in self._handlers.values()]
 
     def call(self, name: str, arguments: dict[str, Any]) -> ToolResult:
+        # Arguments are not recorded: a search query can echo worker-supplied text.
+        with _tracer.start_as_current_span(
+            f"tool {name}", attributes={"onramp.tool": name}
+        ) as span:
+            result = self._call(name, arguments)
+            span.set_attributes(
+                {"onramp.tool.refs": len(result.refs), "onramp.tool.error": result.error or ""}
+            )
+        tool_calls.add(1, {"tool": name, "result": "error" if result.error else "ok"})
+        return result
+
+    def _call(self, name: str, arguments: dict[str, Any]) -> ToolResult:
         if name not in self._handlers:
             return ToolResult({}, error=f"unknown or unavailable tool: {name}")
         spec, handler = self._handlers[name]
@@ -288,9 +305,20 @@ class CaseToolbox:
         )
 
     def _search_policy(self, args: SearchArg) -> ToolResult:
-        hits = self._retriever.search(
-            self._scope.case_type.value, self._scope.incident_at, args.query, k=5
-        )
+        retriever = type(self._retriever).__name__
+        began = time.perf_counter()
+        with _tracer.start_as_current_span(
+            "policy.search",
+            attributes={
+                "onramp.retriever": retriever,
+                "onramp.policy.domain": self._scope.case_type.value,
+            },
+        ) as span:
+            hits = self._retriever.search(
+                self._scope.case_type.value, self._scope.incident_at, args.query, k=5
+            )
+            span.set_attribute("onramp.policy.hits", len(hits))
+        retrieval_duration.record(time.perf_counter() - began, {"retriever": retriever})
         return ToolResult(
             {"passages": [_passage(h) for h in hits]}, passages={h.passage_id for h in hits}
         )

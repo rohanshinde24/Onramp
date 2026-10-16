@@ -6,9 +6,11 @@ handing to investigation are applied directly.
 """
 
 import logging
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 
+from opentelemetry import trace
 from sqlalchemy.orm import Session, sessionmaker
 
 from onramp.actions.evidence import EvidenceRequester
@@ -27,8 +29,10 @@ from onramp.marketplace.reader import MarketplaceReader
 from onramp.policy.applicability import NoApplicablePolicyError
 from onramp.proposals.content import ProposalRequest
 from onramp.proposals.service import create_proposal
+from onramp.telemetry.metrics import check_duration, check_runs
 
 log = logging.getLogger(__name__)
+_tracer = trace.get_tracer("onramp.checks")
 Clock = Callable[[], datetime]
 
 _NEXT_STATE = {
@@ -59,6 +63,20 @@ class CheckService:
         self._clock = clock
 
     def run(
+        self, tenant_id: str, case_id: str, actor: Actor, *, expected_version: int | None = None
+    ) -> CheckRun:
+        with _tracer.start_as_current_span(
+            "checks.run", attributes={"onramp.case_id": case_id, "onramp.tenant_id": tenant_id}
+        ) as span:
+            started = time.perf_counter()
+            run = self._run(tenant_id, case_id, actor, expected_version=expected_version)
+            attributes = {"outcome": run.outcome, "policy_id": run.policy_id or "none"}
+            span.set_attributes({"onramp.check.outcome": run.outcome})
+            check_runs.add(1, attributes)
+            check_duration.record(time.perf_counter() - started, attributes)
+            return run
+
+    def _run(
         self, tenant_id: str, case_id: str, actor: Actor, *, expected_version: int | None = None
     ) -> CheckRun:
         now = self._clock()
