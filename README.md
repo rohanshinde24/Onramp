@@ -10,7 +10,7 @@ approver.
 
 ## Status
 
-Phases 0 through 18 are complete. What works today:
+Phases 0 through 19 are complete. What works today:
 
 * tenants, users and roles, with bearer-token authentication whose role is always read from
   the database
@@ -53,9 +53,12 @@ Phases 0 through 18 are complete. What works today:
   collector, with one trace following an event from the request through the outbox, Kafka,
   consumers, Temporal and the Action Gateway; `make observe` runs it with Grafana, Tempo, Loki
   and Prometheus and an Onramp dashboard (`docs/OPERATIONS.md`)
+* Kubernetes: every role packaged with Kustomize for a local kind cluster, with liveness and
+  readiness per role, drained rolling updates, a slim core image and an ml image, an in-cluster
+  collector, and KEDA scaling the consumers on Kafka lag and the opt-in agent worker on its
+  Temporal backlog (ADR-013, `docs/OPERATIONS.md`)
 
-Not built yet: Kubernetes packaging, final scale
-benchmarks, and AWS staging. The reference, adversarial and fault suites use
+Not built yet: final scale benchmarks and AWS staging. The reference, adversarial and fault suites use
 scripted investigations and measure the application; the judgment suite measures real models.
 
 ## Documents
@@ -93,6 +96,12 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8000/cases
 ```
 
 OpenAPI docs are at `localhost:8000/docs`.
+
+The same roles on a local Kubernetes cluster (kind and kubectl installed):
+
+```sh
+make k8s-up && make k8s-deploy   # API at 127.0.0.1:8180; see docs/OPERATIONS.md
+```
 
 Operator console (Node 22 from `.nvmrc`; the API on port 8000, and Temporal plus the workflow
 worker if cases should move on their own):

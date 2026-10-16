@@ -4,7 +4,7 @@ This log records material differences between the original phased implementation
 system that was actually built. It is not a defect list. Some changes closed correctness gaps;
 others are explicit local-development compromises or deferred production work.
 
-Last reviewed: 2026-10-16 at Phase 18.
+Last reviewed: 2026-10-16 at Phase 19.
 
 ## Correctness changes discovered during implementation
 
@@ -87,8 +87,8 @@ the initially expected newest version.
 
 The formerly common Docker Compose auto-setup repository and image path was archived or
 deprecated. Local development therefore uses the Temporal CLI development server with persisted
-SQLite. This is intentionally not the production topology. Production packaging remains Phase 19
-work.
+SQLite. This is intentionally not the production topology. Phase 19 kept it outside the cluster
+(ADR-013); the production topology is decided in Phase 21.
 
 ### Synchronous application with an asynchronous Temporal client
 
@@ -227,6 +227,25 @@ The scenario format also gained `subject_id` (what the reporter names) and an op
   extra when forced.
 * Deferred: alert rules, trace sampling, and linking the API's direct Temporal signal to the
   workflow trace when the workflow started before the request.
+
+## Phase 19 adaptations
+
+* ADR-010's single image became two (ADR-013): `core` for most roles and `ml` with the
+  embedding model, model SDK and policy corpus. Compose services share the two images by tag
+  instead of building one copy per service. The policy corpus is baked into the ml image for
+  the cluster's setup Job; Compose still mounts it for local editing.
+* Roles without HTTP gained a probe server (`HEALTH_PORT`) with a loop heartbeat. Its first
+  description promised that a dependency outage never restarts a pod; a hung database showed
+  that a call that never returns does, and the docs now say so.
+* Database connections had no connect timeout or keepalives. Found while testing probes on the
+  cluster and fixed (`af4df41`).
+* Dependencies stay under Compose, reached by attaching the kind node to the Compose network,
+  rather than through host ports, so Kafka's advertised listeners did not change.
+* The local Temporal server stays the development server. Choosing the production topology is
+  deferred to Phase 21, where its cost is.
+* Deferred: Temporal worker versioning for workflow code changes during rollouts (today a
+  rolling update can replay old histories on new code), a staging overlay with an external
+  secret store, alert rules on the cluster, a persistent Kafka volume in Compose.
 
 ## Deferred evaluation work
 

@@ -177,10 +177,66 @@ offset commit, so the same message was redelivered and failed on every restart, 
 event behind it on that partition. Fixed in `d7ec75a` with a workflow test that signals a
 finished case: a completed workflow now means there is nothing to wake.
 
+## Running on Kubernetes
+
+The roles also run on a local kind cluster, packaged with Kustomize (ADR-013). Postgres, Kafka,
+Elasticsearch, Temporal and the telemetry backends stay under Compose; the kind node joins the
+Compose network and pods use the Compose names.
+
+```sh
+make k8s-up        # Compose dependencies, stop the Compose roles, kind cluster, KEDA 2.21.0
+make k8s-deploy    # build both images, load them, run the setup Job, roll out every role
+make k8s-status    # deployments, pods, scaled objects, autoscalers, jobs
+make k8s-down      # delete the cluster (the Compose dependencies keep running)
+```
+
+The API is at `http://127.0.0.1:8180`. `make k8s-deploy` tags images by ID, so a deploy with no
+code change restarts nothing and a change restarts only the roles whose image changed. Before
+each rollout the `onramp-setup` Job runs migrations, creates Kafka topics, and loads and indexes
+the policy corpus baked into the ml image. The agent worker is off: `ANTHROPIC_API_KEY=...
+make k8s-agent` adds it with your key, and then investigations call the model and cost money.
+
+Each role's probes, shutdown budget and scaling signal are in the deployment table in
+`docs/ARCHITECTURE.md`. The whole node, with KEDA and the collector, used about 1.7 GiB; the
+Onramp pods used 70 to 150 MiB each, which set their memory requests.
+
+### What I checked on the cluster
+
+Commands are from the repository at `d25f677`, on one kind node (Kubernetes 1.37) in Docker
+Desktop with 8 GB on a 16 GB laptop.
+
+| Check | Command | Result |
+|---|---|---|
+| A case end to end | open a payout case through the NodePort, accept its proposal | the cluster's workflow worker ran checks and proposed; the accept resolved it; the cluster's publisher and case-signal consumer delivered the fallback event, ignored as already applied |
+| API rollout under traffic, 10 s `preStop` | `make k8s-rollout-check` (three runs) | 0 failed of 9,841 requests |
+| The same with a 5 s `preStop` | as above, earlier manifest (three runs) | 2 failed of 7,165, all in one run |
+| The same with no `preStop` (control) | as above, sleep patched out (two runs) | 81 failed of 5,175 (`RemoteDisconnected`) |
+| Database outage, 45 s | `docker pause onramp-postgres-1` | both API pods NotReady and out of the Service; every other role Ready; no restarts; full recovery |
+| Database hung past two minutes | the same pause for 170 s | publisher and relay loops blocked in a query and failed liveness, as designed for a hung call |
+| Lag autoscaling | `backend/.venv/bin/python deploy/k8s/kind/lag_burst.py 20000` | event consumer 1 to 3 replicas while the burst was published, back to 1 about two minutes after it drained; 20,000 events processed, 20,000 distinct |
+| Backlog autoscaling | `kind-agent` overlay with a placeholder key and a closed local model URL | agent worker 0 to 1 on one queued task, back to 0 once the queue was empty; no model request left the pod |
+
+The 170-second pause found that database connections had no connect timeout or keepalives,
+so a lost database blocked calls indefinitely. Connections now time out after 5 seconds and
+use TCP keepalives (`af4df41`). A database that accepts connections and never answers is
+still caught only by the loop heartbeat, which is what restarts the publisher.
+
+### Limits of these checks
+
+* One node and laptop timings. The `preStop` margin depends on how fast endpoint removal
+  propagates; staging needs its own rollout check.
+* The lag burst uses events that do nothing, so it shows the scaling decision and exactly-once
+  processing across rebalances, not throughput. Throughput is Phase 20.
+* The backlog test's queued task was an orphan from an earlier session whose workflow had
+  moved on. It showed that a stale backlog estimate keeps the agent worker scaled up until a
+  worker polls once and Temporal discards the task.
+* Kafka here is a single broker without a volume (Compose), and Temporal is the development
+  server. The cluster shows the roles, not those dependencies.
+
 ## Limits
 
-* One development container holds the collector and all backends, with no persistence; it
-  restarts empty. Production packaging is Phase 19.
+* One development container holds the backends, with no persistence; it restarts empty. On
+  Kubernetes a collector in the cluster sits in front of it; managed backends are staging work.
 * Every span is sampled and every SQL statement is a span. Fine locally; a deployment needs a
   sampling decision.
 * No alert rules are defined yet. The dashboard shows the signals an alert would use (backlog
