@@ -7,6 +7,7 @@ With one, all three signals go to the same collector, tagged with the process ro
 
 import logging
 from dataclasses import dataclass
+from typing import Any
 
 from opentelemetry import metrics, trace
 from opentelemetry._logs import set_logger_provider
@@ -14,7 +15,6 @@ from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
 from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.logging.handler import LoggingHandler
-from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 from opentelemetry.sdk._logs import LoggerProvider
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.sdk.metrics import MeterProvider
@@ -22,7 +22,9 @@ from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from sqlalchemy import Engine
+from opentelemetry.trace import SpanKind, StatusCode
+from sqlalchemy import Connection, Engine, event
+from sqlalchemy.engine import ExceptionContext, ExecutionContext
 
 from onramp.config import Settings
 from onramp.telemetry.logging import ContextFilter
@@ -93,5 +95,66 @@ def configure_telemetry(settings: Settings, process_role: str) -> Telemetry:
 
 
 def instrument_databases(*engines: Engine) -> None:
-    """One span per SQL statement, so a slow or failing query shows inside its request trace."""
-    SQLAlchemyInstrumentor().instrument(engines=list(engines), enable_commenter=False)
+    """One client span per SQL statement, inside whatever request, message or activity ran it,
+    so a slow or failing query shows in that trace.
+
+    Spans carry the operation and database, never the statement text or parameters, which can
+    hold worker-supplied text. (OpenTelemetry's SQLAlchemy instrumentation does not support
+    SQLAlchemy 2.1 and would also require the asyncio extra; these three engine events are all
+    it would use here.)
+    """
+    for engine in engines:
+        if not event.contains(engine, "before_cursor_execute", _before_statement):
+            event.listen(engine, "before_cursor_execute", _before_statement)
+            event.listen(engine, "after_cursor_execute", _after_statement)
+            event.listen(engine, "handle_error", _failed_statement)
+
+
+_db_tracer = trace.get_tracer("onramp.db")
+_SPAN = "_onramp_span"
+
+
+def _before_statement(
+    connection: Connection,
+    cursor: Any,
+    statement: str,
+    parameters: Any,
+    context: ExecutionContext | None,
+    executemany: bool,
+) -> None:
+    if context is None:
+        return
+    words = statement.split(None, 1)
+    operation = words[0].upper() if words else "SQL"
+    database = connection.engine.url.database or ""
+    span = _db_tracer.start_span(
+        f"{operation} {database}",
+        kind=SpanKind.CLIENT,
+        attributes={
+            "db.system": connection.engine.dialect.name,
+            "db.namespace": database,
+            "db.operation.name": operation,
+        },
+    )
+    setattr(context, _SPAN, span)
+
+
+def _after_statement(
+    connection: Connection,
+    cursor: Any,
+    statement: str,
+    parameters: Any,
+    context: ExecutionContext | None,
+    executemany: bool,
+) -> None:
+    span = getattr(context, _SPAN, None)
+    if span is not None:
+        span.end()
+
+
+def _failed_statement(exception_context: ExceptionContext) -> None:
+    span = getattr(exception_context.execution_context, _SPAN, None)
+    if span is not None:
+        error = exception_context.original_exception
+        span.set_status(StatusCode.ERROR, type(error).__name__)
+        span.end()

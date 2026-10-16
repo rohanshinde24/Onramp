@@ -1,8 +1,11 @@
 """Spans and metrics on the consequential paths record what happened, not what was tried."""
 
 import pytest
-from opentelemetry import metrics
+from opentelemetry import metrics, trace
 from opentelemetry.sdk.metrics import MeterProvider
+from sqlalchemy import text
+from sqlalchemy.exc import ProgrammingError
+from sqlalchemy.orm import Session, sessionmaker
 
 from onramp.actions.gateway import GatewayRejectedError
 from onramp.approvals.models import Decision
@@ -10,6 +13,7 @@ from onramp.approvals.service import AlreadyDecidedError, ApprovalService
 from onramp.marketplace.faults import Fault, FaultPlan, FaultyMarketplaceWriter
 from onramp.marketplace.writer import SqlMarketplaceWriter
 from onramp.proposals.models import Proposal
+from onramp.telemetry.setup import instrument_databases
 from tests.conftest import Captured
 from tests.integration.test_action_gateway import (
     LEAD,
@@ -89,3 +93,41 @@ def test_a_lost_marketplace_response_shows_as_two_write_attempts(
     assert all(w.parent is not None and w.parent.span_id == execute.context.span_id for w in writes)
     assert execute.attributes is not None
     assert execute.attributes["onramp.gateway.outcome"] == "succeeded"
+
+
+def test_sql_statements_become_spans_inside_the_current_trace(
+    onramp_sessions: sessionmaker[Session], telemetry: Captured
+) -> None:
+    instrument_databases(onramp_sessions.kw["bind"].engine)
+
+    with (
+        trace.get_tracer("test").start_as_current_span("unit of work") as parent,
+        onramp_sessions() as session,
+    ):
+        session.execute(text("SELECT 1"))
+
+    statements = [
+        s
+        for s in telemetry.spans.get_finished_spans()
+        if s.name.startswith("SELECT") and s.context.trace_id == parent.get_span_context().trace_id
+    ]
+    assert statements
+    assert statements[0].attributes is not None
+    assert statements[0].attributes["db.system"] == "postgresql"
+    assert "SELECT 1" not in str(statements[0].attributes)  # no statement text
+
+
+def test_a_failing_statement_ends_its_span_as_an_error(
+    onramp_sessions: sessionmaker[Session], telemetry: Captured
+) -> None:
+    instrument_databases(onramp_sessions.kw["bind"].engine)
+
+    with onramp_sessions() as session, pytest.raises(ProgrammingError):
+        session.execute(text("SELECT * FROM no_such_table"))
+
+    (failed,) = [
+        s
+        for s in telemetry.spans.get_finished_spans()
+        if s.name.startswith("SELECT") and not s.status.is_ok
+    ]
+    assert failed.status.description == "UndefinedTable"  # the driver error
