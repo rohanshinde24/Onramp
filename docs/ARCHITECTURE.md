@@ -178,10 +178,13 @@ prompt.
 
 ## Observability
 
-OpenTelemetry from the first service commit. Trace context crosses Kafka in message headers
-and crosses Temporal through its tracing interceptor. Every log line carries `tenant_id`,
-`case_id`, `workflow_id`, `event_id`, `correlation_id` and `causation_id` where they exist.
-Details in `docs/OPERATIONS.md` when Phase 18 begins.
+Every process role exports OpenTelemetry traces, metrics and logs to one collector. Trace
+context is stored with each outbox row, carried in Kafka headers and restored by consumers, and
+crosses Temporal through its tracing interceptor, so one trace follows a fact from the request
+that caused it through the publisher, consumers, workflow, activities and gateway. Every log
+line carries `tenant_id`, `case_id`, `workflow_id`, `event_id`, `correlation_id` and
+`causation_id` where they exist, plus the trace ID. Metrics, the dashboard and a debugging
+walkthrough are in `docs/OPERATIONS.md`.
 
 ## Deployment
 

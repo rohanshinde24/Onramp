@@ -10,7 +10,7 @@ approver.
 
 ## Status
 
-Phases 0 through 17 are complete. What works today:
+Phases 0 through 18 are complete. What works today:
 
 * tenants, users and roles, with bearer-token authentication whose role is always read from
   the database
@@ -49,8 +49,12 @@ Phases 0 through 17 are complete. What works today:
   with the decision, investigation trajectory, checks, the policy version in force with every
   cited passage, the marketplace evidence, approvals, gateway results and the audit timeline;
   plus a view of stored evaluation runs, and a browser end-to-end test of its decisions
+* observability: traces, metrics and logs from every process role through one OpenTelemetry
+  collector, with one trace following an event from the request through the outbox, Kafka,
+  consumers, Temporal and the Action Gateway; `make observe` runs it with Grafana, Tempo, Loki
+  and Prometheus and an Onramp dashboard (`docs/OPERATIONS.md`)
 
-Not built yet: full observability, Kubernetes packaging, final scale
+Not built yet: Kubernetes packaging, final scale
 benchmarks, and AWS staging. The reference, adversarial and fault suites use
 scripted investigations and measure the application; the judgment suite measures real models.
 
@@ -60,6 +64,7 @@ scripted investigations and measure the application; the judgment suite measures
 * [Architecture](docs/ARCHITECTURE.md)
 * [Architecture decision records](docs/adr/README.md)
 * [Case evaluation](docs/EVALUATION.md) and [benchmarks](docs/BENCHMARKS.md)
+* [Operations: telemetry, dashboard and a debugging walkthrough](docs/OPERATIONS.md)
 * [Implementation drift and follow-ups](docs/IMPLEMENTATION_DRIFT.md)
 
 ## Running locally

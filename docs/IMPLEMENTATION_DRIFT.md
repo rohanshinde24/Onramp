@@ -4,7 +4,7 @@ This log records material differences between the original phased implementation
 system that was actually built. It is not a defect list. Some changes closed correctness gaps;
 others are explicit local-development compromises or deferred production work.
 
-Last reviewed: 2026-10-16 at Phase 17.
+Last reviewed: 2026-10-16 at Phase 18.
 
 ## Correctness changes discovered during implementation
 
@@ -204,6 +204,29 @@ The scenario format also gained `subject_id` (what the reporter names) and an op
   written, and another tenant's case not found. The API outage page is still checked by hand.
 * Deferred: an assignee filter in the inbox (nothing assigns cases yet), queue counts above
   100, and an admin view of audit history across cases (admins see each case's timeline).
+
+## Phase 18 adaptations
+
+* Trace context crosses the outbox in a new nullable `trace_context` column on both outbox
+  tables rather than in the event envelope, so the event contract and every consumer's parsing
+  are unchanged.
+* The observability backends run in one `grafana/otel-lgtm` development container instead of a
+  separate collector, Tempo, Prometheus, Loki and Grafana. It is a local convenience; Phase 19
+  decides the deployed shape.
+* Each role reports as its own service, `onramp-<role>`, instead of one `onramp` service with a
+  role attribute, because Prometheus does not promote custom resource attributes to labels.
+* Business counters are recorded on commit through a session hook, after the first version
+  would have counted transitions inside transactions that later rolled back.
+* Bringing the full stack up with telemetry exposed two defects that tests had not: a late
+  event for a case whose workflow had completed crash-looped the case-signal consumer
+  (`d7ec75a`), and consumer lag read zero while a consumer held no partitions (`eba23cf`).
+  Both are written up in `docs/OPERATIONS.md`.
+* SQL spans come from three SQLAlchemy engine events in `telemetry/setup.py`, not from
+  OpenTelemetry's SQLAlchemy instrumentation, which declares no support for SQLAlchemy 2.1,
+  logged an error and instrumented nothing in the first Phase 18 commits, and needs the asyncio
+  extra when forced.
+* Deferred: alert rules, trace sampling, and linking the API's direct Temporal signal to the
+  workflow trace when the workflow started before the request.
 
 ## Deferred evaluation work
 
