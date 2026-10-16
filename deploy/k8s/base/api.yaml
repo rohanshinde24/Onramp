@@ -21,8 +21,8 @@ spec:
         app.kubernetes.io/name: onramp-api
     spec:
       automountServiceAccountToken: false
-      # preStop (5 s) plus uvicorn's graceful shutdown (20 s) plus slack.
-      terminationGracePeriodSeconds: 35
+      # preStop (10 s) plus uvicorn's graceful shutdown (20 s) plus slack.
+      terminationGracePeriodSeconds: 40
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
@@ -61,7 +61,7 @@ spec:
             # drain. Without this, requests already routed here are refused.
             preStop:
               sleep:
-                seconds: 5
+                seconds: 10
           resources:
             requests: {cpu: 100m, memory: 128Mi}
             limits: {memory: 512Mi}

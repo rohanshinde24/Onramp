@@ -39,13 +39,17 @@ indexer and the agent worker use.
   on managed Postgres, is decided in Phase 21 where its cost is.
 * **Probes per role.** The API answers on its own port. Every other long-running role serves
   `/healthz` and `/readyz` on a small probe port. Liveness fails only when the role's loop has
-  stopped beating, never on a dependency outage, so an outage does not turn into restarts.
+  stopped beating for two minutes. A dependency that refuses or errors does not stop the loop,
+  so an outage does not turn into restarts; one that hangs a call does, and the restart replaces
+  the stuck connection. Database connections time out on connect and use TCP keepalives, so a
+  lost database errors instead of hanging.
   Readiness turns on after startup and off at SIGTERM. A startup probe on readiness bounds
   startup, which for the workflow worker includes reconciliation.
 * **Shutdown budgets.** Each role drains within 20 seconds of SIGTERM (ADR-010) and each pod
-  allows 30 to 45 seconds before the kubelet kills it. The API sleeps 5 seconds in `preStop`
+  allows 30 to 45 seconds before the kubelet kills it. The API sleeps 10 seconds in `preStop`
   first, so its endpoint is removed from the Service before uvicorn stops accepting
-  connections.
+  connections. Measured on kind: with no sleep, rollouts dropped requests; with 5 seconds, one
+  rollout in three still dropped two; with 10 seconds, none did (`docs/OPERATIONS.md`).
 * **Rolling updates never drop below the desired count** (`maxUnavailable: 0`), and the API
   keeps a PodDisruptionBudget. Overlapping publishers during a rollout are safe because order
   across publisher replicas is protected by `aggregate_version` (ADR-005).
