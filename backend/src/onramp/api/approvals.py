@@ -9,7 +9,9 @@ from onramp.api.auth import CurrentPrincipal, get_services
 from onramp.api.services import AppServices
 from onramp.api.workflow_notifications import signal_case
 from onramp.approvals.models import Approval, Decision
+from onramp.cases.queries import get_case
 from onramp.events.models import OutboxEvent
+from onramp.identity.roles import Permission
 from onramp.proposals.models import Proposal
 
 router = APIRouter(tags=["approvals"])
@@ -78,3 +80,22 @@ def decide(
             event_id,
         )
     return ApprovalView.of(approval)
+
+
+@router.get("/cases/{case_id}/approvals", response_model=list[ApprovalView])
+def list_approvals(
+    case_id: str, principal: CurrentPrincipal, services: Services
+) -> list[ApprovalView]:
+    principal.require(Permission.CASE_READ)
+    with services.sessions() as session:
+        get_case(session, principal.tenant_id, case_id)
+        rows = session.scalars(
+            select(Approval)
+            .join(
+                Proposal,
+                (Proposal.tenant_id == Approval.tenant_id) & (Proposal.id == Approval.proposal_id),
+            )
+            .where(Approval.tenant_id == principal.tenant_id, Proposal.case_id == case_id)
+            .order_by(Approval.decided_at, Approval.id)
+        )
+        return [ApprovalView.of(a) for a in rows]

@@ -21,6 +21,8 @@ def test_me_returns_principal_with_role_from_database(client: TestClient) -> Non
     body = response.json()
     assert (body["user_id"], body["tenant_id"], body["role"]) == ("usr_op", "acme", "operator")
     assert "approve.high_risk" not in body["permissions"]
+    assert (body["display_name"], body["tenant_name"]) == ("usr_op", "Acme")
+    assert body["payout_approval_limit_cents"] == 50_000
 
 
 def test_missing_token_is_unauthenticated(client: TestClient) -> None:

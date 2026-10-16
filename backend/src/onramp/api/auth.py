@@ -49,3 +49,4 @@ def get_principal(
 
 
 CurrentPrincipal = Annotated[Principal, Depends(get_principal)]
+Services = Annotated[AppServices, Depends(get_services)]
