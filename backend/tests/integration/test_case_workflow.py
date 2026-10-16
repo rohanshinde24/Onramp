@@ -8,6 +8,7 @@ from temporalio.worker import Worker
 from onramp.cases.state import CaseState
 from onramp.workflows.activities import InvestigationUnavailableError
 from onramp.workflows.case import CaseWorkflow
+from onramp.workflows.client import TemporalCaseCoordinator
 from onramp.workflows.contracts import (
     WORKFLOW_TASK_QUEUE,
     CaseSignal,
@@ -225,5 +226,52 @@ def test_provider_failure_is_retried_with_backoff_not_a_tight_loop() -> None:
                 assert plan.attempts == 3
                 # Two failures wait 30s then 60s before the next attempt.
                 assert elapsed >= timedelta(seconds=90)
+
+    asyncio.run(scenario())
+
+
+@activity.defn(name="read_case")
+async def _read_resolved(_: CaseWorkflowInput) -> CaseSnapshot:
+    return CaseSnapshot(CaseState.RESOLVED.value)
+
+
+def test_a_late_event_for_a_finished_case_is_a_no_op() -> None:
+    """A case's workflow completes only when the case is terminal. An event that arrives after
+    that, late or replayed, must not fail the consumer that delivers it, or it would be
+    redelivered and fail forever."""
+
+    async def scenario() -> None:
+        async with await WorkflowEnvironment.start_time_skipping() as environment, Worker(
+            environment.client,
+            task_queue=WORKFLOW_TASK_QUEUE,
+            workflows=[CaseWorkflow],
+            activities=[_read_resolved],
+        ):
+            request = CaseWorkflowInput("acme", "case_done")
+            handle = await environment.client.start_workflow(
+                CaseWorkflow.run,
+                request,
+                id=case_workflow_id(request.case_id),
+                task_queue=WORKFLOW_TASK_QUEUE,
+            )
+            await handle.result()
+            finished_run = (await handle.describe()).run_id
+
+            coordinator = TemporalCaseCoordinator(
+                environment.client.service_client.config.target_host,
+                environment.client.namespace,
+                WORKFLOW_TASK_QUEUE,
+                "agent",
+            )
+            try:
+                await asyncio.to_thread(
+                    coordinator.signal_case, "acme", "case_done", "case_changed", "evt_late"
+                )
+                await asyncio.to_thread(coordinator.start_case, "acme", "case_done")
+            finally:
+                coordinator.close()
+
+            latest = environment.client.get_workflow_handle(case_workflow_id("case_done"))
+            assert (await latest.describe()).run_id == finished_run
 
     asyncio.run(scenario())
