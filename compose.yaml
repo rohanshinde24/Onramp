@@ -77,6 +77,9 @@ services:
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?set AUTH_JWT_SECRET in .env}
       KAFKA_BOOTSTRAP_SERVERS: kafka:19092
       TEMPORAL_ADDRESS: temporal:7233
+      # Empty means telemetry is created but not exported. `make observe` sets it to the
+      # observability container; host processes use OTEL_EXPORTER_OTLP_ENDPOINT in .env.
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${CONTAINER_OTLP_ENDPOINT:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -224,6 +227,23 @@ services:
       kafka-topics:
         condition: service_completed_successfully
     stop_grace_period: 30s
+
+  # Traces (Tempo), metrics (Prometheus), logs (Loki) and Grafana behind one OpenTelemetry
+  # collector, in a single development container. Not a production topology.
+  observability:
+    profiles: ["observability"]
+    image: grafana/otel-lgtm:0.34.0
+    ports:
+      - "127.0.0.1:3300:3000"   # Grafana
+      - "127.0.0.1:4318:4318"   # OTLP over HTTP, for host processes
+    volumes:
+      - ./deploy/observability/dashboards.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/onramp.yaml:ro
+      - ./deploy/observability/onramp-dashboard.json:/otel-lgtm/onramp-dashboard.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs localhost:3000/api/health >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
 
   # Browser end-to-end stack (`make e2e`): its own API, workflow worker and in-memory Temporal
   # over the onramp_e2e and marketplace_e2e databases, so a run never reads or writes the dev

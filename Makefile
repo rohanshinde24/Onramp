@@ -1,7 +1,7 @@
 BACKEND := backend
 PY := $(BACKEND)/.venv/bin
 
-.PHONY: install lint format typecheck test test-integration test-kafka test-search check up down api-image migrate seed dlq-replay load-policies retrieval-eval case-eval adversarial-eval fault-eval compare baseline judgment-eval judgment-dataset promptfoo-view e2e e2e-up e2e-down
+.PHONY: install lint format typecheck test test-integration test-kafka test-search check up down api-image migrate seed dlq-replay load-policies retrieval-eval case-eval adversarial-eval fault-eval compare baseline judgment-eval judgment-dataset promptfoo-view e2e e2e-up e2e-down observe observe-down
 
 install:
 	python3.13 -m venv $(BACKEND)/.venv
@@ -130,3 +130,21 @@ e2e: e2e-up
 
 e2e-down:
 	$(E2E_COMPOSE) rm -sf $(E2E_SERVICES)
+
+# The whole application with telemetry: traces, metrics and logs from every container go to one
+# collector, and Grafana at http://localhost:3300 has the Onramp dashboard and Tempo and Loki.
+# Host processes export there too with OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318.
+# The role containers are recreated explicitly: Compose builds a separate image per service and
+# did not always replace a running container after a rebuild. Kafka is left alone; it has no
+# volume, so recreating it would drop messages not yet consumed.
+OBSERVE_COMPOSE := CONTAINER_OTLP_ENDPOINT=http://observability:4318 docker compose \
+	--profile observability --profile app
+ONRAMP_ROLES := api workflow-worker outbox-publisher event-consumer case-signal-consumer \
+	marketplace-relay
+observe:
+	$(OBSERVE_COMPOSE) up -d --build --wait
+	$(OBSERVE_COMPOSE) up -d --force-recreate --no-deps --wait $(ONRAMP_ROLES)
+	$(PY)/onramp-kafka-topics
+
+observe-down:
+	docker compose --profile observability --profile app stop

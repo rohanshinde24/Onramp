@@ -15,7 +15,7 @@ from temporalio.runtime import OpenTelemetryConfig, Runtime, TelemetryConfig
 from temporalio.worker import Worker
 
 
-def _runtime(otlp_endpoint: str | None, task_queue: str) -> Runtime | None:
+def _runtime(otlp_endpoint: str | None) -> Runtime | None:
     """Temporal's own worker metrics (poll and task latency, schedule-to-start, slots), sent to
     the same collector as Onramp's. Without an endpoint the SDK default runtime is used."""
     if not otlp_endpoint:
@@ -28,7 +28,6 @@ def _runtime(otlp_endpoint: str | None, task_queue: str) -> Runtime | None:
                 metric_periodicity=timedelta(seconds=10),
                 durations_as_seconds=True,
             ),
-            global_tags={"onramp_task_queue": task_queue},
         )
     )
 
@@ -53,7 +52,7 @@ async def run_worker(
         address,
         namespace=namespace,
         interceptors=[TracingInterceptor(trace.get_tracer("onramp.temporal"))],
-        runtime=_runtime(otlp_endpoint, task_queue),
+        runtime=_runtime(otlp_endpoint),
     )
     with ThreadPoolExecutor(thread_name_prefix=f"{task_queue}-activity") as executor:
         worker = Worker(

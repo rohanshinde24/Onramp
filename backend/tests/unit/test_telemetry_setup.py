@@ -39,5 +39,6 @@ def test_with_an_endpoint_logs_are_exported_with_correlation_fields() -> None:
     assert any(isinstance(f, ContextFilter) for f in handlers[0].filters)
     resource = telemetry.tracer_provider.resource.attributes
     assert resource["onramp.process_role"] == "api"
+    assert resource["service.name"] == "onramp-api"
     # Shut down without flushing to a collector that is not running.
     handlers[0].close()

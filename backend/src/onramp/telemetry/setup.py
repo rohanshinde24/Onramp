@@ -47,7 +47,8 @@ class Telemetry:
 def configure_telemetry(settings: Settings, process_role: str) -> Telemetry:
     resource = Resource.create(
         {
-            "service.name": settings.service_name,
+            # One service per role, so dashboards and trace views tell the API from the workers.
+            "service.name": f"{settings.service_name}-{process_role}",
             "service.namespace": "onramp",
             "onramp.process_role": process_role,
             "deployment.environment": settings.app_env.value,
