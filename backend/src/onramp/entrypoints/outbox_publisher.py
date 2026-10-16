@@ -19,7 +19,7 @@ from onramp.events.models import OutboxEvent, OutboxEventColumns
 from onramp.events.publisher import OutboxPublisher, outbox_backlog
 from onramp.marketplace.events import MARKETPLACE_OUTBOX_TABLE
 from onramp.telemetry.logging import configure_logging
-from onramp.telemetry.tracing import configure_tracing
+from onramp.telemetry.setup import configure_telemetry, instrument_databases
 
 log = logging.getLogger("onramp.outbox_publisher")
 BACKLOG_REPORT_INTERVAL_S = 15.0
@@ -31,7 +31,7 @@ def main() -> None:
     source = parser.parse_args().source
     settings = get_settings()
     configure_logging(settings.log_level)
-    provider = configure_tracing(settings, process_role="outbox-publisher")
+    telemetry = configure_telemetry(settings, process_role="outbox-publisher")
     if not settings.kafka_bootstrap_servers:
         sys.exit("KAFKA_BOOTSTRAP_SERVERS is not set")
 
@@ -40,6 +40,7 @@ def main() -> None:
         OutboxEvent if source == "onramp" else MARKETPLACE_OUTBOX_TABLE
     )
     engine = make_engine(str(url))
+    instrument_databases(engine)
     sessions = make_session_factory(engine)
     sink = KafkaSink(
         producer_config(
@@ -72,7 +73,7 @@ def main() -> None:
     finally:
         sink.close()
         engine.dispose()
-        provider.shutdown()
+        telemetry.shutdown()
         log.info("outbox publisher stopped")
 
 

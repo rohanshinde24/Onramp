@@ -43,6 +43,16 @@ def current_log_context() -> dict[str, str]:
     return dict(_context.get())
 
 
+class ContextFilter(logging.Filter):
+    """Copies the bound correlation fields onto each record, for handlers that export record
+    attributes (the OTLP log handler) rather than formatting through JsonFormatter."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        for key, value in _context.get().items():
+            setattr(record, key, value)
+        return True
+
+
 class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         entry: dict[str, Any] = {

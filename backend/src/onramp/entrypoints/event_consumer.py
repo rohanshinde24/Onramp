@@ -17,7 +17,7 @@ from onramp.events.kafka import (
 )
 from onramp.marketplace.reader import SqlMarketplaceReader
 from onramp.telemetry.logging import configure_logging
-from onramp.telemetry.tracing import configure_tracing
+from onramp.telemetry.setup import configure_telemetry, instrument_databases
 from onramp.workflows.client import TemporalCaseCoordinator
 
 log = logging.getLogger("onramp.event_consumer")
@@ -27,13 +27,14 @@ REPORT_INTERVAL_S = 15.0
 def main() -> None:
     settings = get_settings()
     configure_logging(settings.log_level)
-    provider = configure_tracing(settings, process_role="event-consumer")
+    telemetry = configure_telemetry(settings, process_role="event-consumer")
     bootstrap = settings.kafka_bootstrap_servers
     if not bootstrap:
         sys.exit("KAFKA_BOOTSTRAP_SERVERS is not set")
 
     engine = make_engine(str(settings.database_url))
     marketplace_engine = make_engine(str(settings.marketplace_database_url))
+    instrument_databases(engine, marketplace_engine)
     coordinator = TemporalCaseCoordinator(
         settings.temporal_address,
         settings.temporal_namespace,
@@ -64,7 +65,7 @@ def main() -> None:
         coordinator.close()
         engine.dispose()
         marketplace_engine.dispose()
-        provider.shutdown()
+        telemetry.shutdown()
         log.info("event consumer stopped")
 
 

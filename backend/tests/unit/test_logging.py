@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from opentelemetry.sdk.trace import TracerProvider
 
 from onramp.api.app import create_app
-from onramp.telemetry.logging import JsonFormatter, current_log_context, log_context
+from onramp.telemetry.logging import ContextFilter, JsonFormatter, current_log_context, log_context
 
 
 def _record(message: str) -> logging.LogRecord:
@@ -78,3 +78,11 @@ def test_error_responses_hide_library_internals() -> None:
 
     assert response.status_code == 409
     assert response.json() == {"error": "stale_case", "detail": None}
+
+
+def test_context_filter_copies_bound_fields_onto_records() -> None:
+    record = _record("exported")
+    with log_context(case_id="case-9", correlation_id="corr-1"):
+        assert ContextFilter().filter(record)
+
+    assert (record.case_id, record.correlation_id) == ("case-9", "corr-1")  # type: ignore[attr-defined]

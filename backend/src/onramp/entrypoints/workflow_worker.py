@@ -13,7 +13,7 @@ from onramp.entrypoints.temporal_worker import run_worker
 from onramp.marketplace.reader import SqlMarketplaceReader
 from onramp.marketplace.writer import SqlMarketplaceWriter
 from onramp.telemetry.logging import configure_logging
-from onramp.telemetry.tracing import configure_tracing
+from onramp.telemetry.setup import configure_telemetry, instrument_databases
 from onramp.workflows.activities import WorkflowActivities
 from onramp.workflows.case import CaseWorkflow
 from onramp.workflows.client import TemporalCaseCoordinator
@@ -25,9 +25,10 @@ log = logging.getLogger("onramp.workflow_worker")
 def main() -> None:
     settings = get_settings()
     configure_logging(settings.log_level)
-    provider = configure_tracing(settings, process_role="workflow-worker")
+    telemetry = configure_telemetry(settings, process_role="workflow-worker")
     engine = make_engine(str(settings.database_url))
     marketplace_engine = make_engine(str(settings.marketplace_database_url))
+    instrument_databases(engine, marketplace_engine)
     sessions = make_session_factory(engine)
     marketplace_sessions = make_session_factory(marketplace_engine)
     marketplace = SqlMarketplaceReader(marketplace_sessions)
@@ -68,7 +69,7 @@ def main() -> None:
         log.info("workflow worker stopped")
         engine.dispose()
         marketplace_engine.dispose()
-        provider.shutdown()
+        telemetry.shutdown()
 
 
 if __name__ == "__main__":
