@@ -32,6 +32,8 @@ spec:
       containers:
         - name: api
           image: onramp-core
+          # Images are loaded into the node, never pulled.
+          imagePullPolicy: IfNotPresent
           command: ["onramp-api"]
           envFrom:
             - configMapRef:

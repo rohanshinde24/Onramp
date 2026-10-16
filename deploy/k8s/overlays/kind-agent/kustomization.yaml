@@ -1,0 +1,13 @@
+# The kind environment with the agent worker (ADR-013). Its model key is not generated here:
+# create the onramp-model-credentials Secret yourself (`make k8s-agent` does it from
+# ANTHROPIC_API_KEY in your shell). With a real key, investigations call the model and cost
+# money.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: onramp
+resources:
+  - ../kind
+components:
+  - ../../components/agent-worker
+  # Image tags apply only to resources already in the build, so this overlay sets them again.
+  - ../kind/.generated

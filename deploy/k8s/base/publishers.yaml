@@ -34,6 +34,8 @@ spec:
       containers:
         - name: outbox-publisher
           image: onramp-core
+          # Images are loaded into the node, never pulled.
+          imagePullPolicy: IfNotPresent
           command: ["onramp-outbox-publisher"]
           envFrom:
             - configMapRef:
@@ -107,6 +109,8 @@ spec:
       containers:
         - name: marketplace-relay
           image: onramp-core
+          # Images are loaded into the node, never pulled.
+          imagePullPolicy: IfNotPresent
           command: ["onramp-outbox-publisher", "marketplace"]
           envFrom:
             - configMapRef:

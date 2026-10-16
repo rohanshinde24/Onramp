@@ -27,6 +27,8 @@ spec:
       initContainers:
         - name: migrate
           image: onramp-core
+          # Images are loaded into the node, never pulled.
+          imagePullPolicy: IfNotPresent
           command: ["onramp-migrate"]
           envFrom: &env
             - configMapRef:
@@ -46,6 +48,8 @@ spec:
               mountPath: /tmp
         - name: kafka-topics
           image: onramp-core
+          # Images are loaded into the node, never pulled.
+          imagePullPolicy: IfNotPresent
           command: ["onramp-kafka-topics"]
           envFrom: *env
           resources: *small
@@ -54,6 +58,8 @@ spec:
       containers:
         - name: policy-sync
           image: onramp-ml
+          # Images are loaded into the node, never pulled.
+          imagePullPolicy: IfNotPresent
           command:
             ["sh", "-c", "onramp-load-policies /home/onramp/policies && onramp-policy-indexer"]
           envFrom: *env

@@ -34,6 +34,8 @@ spec:
       containers:
         - name: workflow-worker
           image: onramp-core
+          # Images are loaded into the node, never pulled.
+          imagePullPolicy: IfNotPresent
           command: ["onramp-workflow-worker"]
           envFrom:
             - configMapRef:

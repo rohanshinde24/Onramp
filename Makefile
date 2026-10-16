@@ -1,7 +1,7 @@
 BACKEND := backend
 PY := $(BACKEND)/.venv/bin
 
-.PHONY: install lint format typecheck test test-integration test-kafka test-search check up down images migrate seed dlq-replay load-policies retrieval-eval case-eval adversarial-eval fault-eval compare baseline judgment-eval judgment-dataset promptfoo-view e2e e2e-up e2e-down observe observe-down k8s-up k8s-deploy k8s-status k8s-down
+.PHONY: install lint format typecheck test test-integration test-kafka test-search check up down images migrate seed dlq-replay load-policies retrieval-eval case-eval adversarial-eval fault-eval compare baseline judgment-eval judgment-dataset promptfoo-view e2e e2e-up e2e-down observe observe-down k8s-up k8s-deploy k8s-agent k8s-rollout-check k8s-status k8s-down
 
 install:
 	python3.13 -m venv $(BACKEND)/.venv
@@ -38,9 +38,11 @@ down:
 	docker compose down
 
 # The two role images: core for most roles, ml for the policy indexer and agent worker.
+# No provenance attestation: it is timestamped, so every build would get a new image ID and the
+# kind deploy, which tags by ID, would roll every role even when nothing changed.
 images:
-	docker build --target core -t onramp-core:dev $(BACKEND)
-	docker build --target ml --build-context policies=policies -t onramp-ml:dev $(BACKEND)
+	docker build --provenance=false --target core -t onramp-core:dev $(BACKEND)
+	docker build --provenance=false --target ml --build-context policies=policies -t onramp-ml:dev $(BACKEND)
 
 migrate:
 	$(PY)/onramp-migrate
@@ -181,6 +183,21 @@ k8s-deploy: images
 	$(KUBE) -n onramp wait --for=condition=complete job/onramp-setup --timeout=600s
 	$(KUBE) apply --server-side -k $(K8S_OVERLAY)
 	$(KUBE) -n onramp rollout status deployment --timeout=300s
+
+# Opt in to the agent worker with your own key: ANTHROPIC_API_KEY=... make k8s-agent
+# With a real key, every investigation calls the model and costs money.
+k8s-agent:
+	@test -n "$$ANTHROPIC_API_KEY" || { echo "set ANTHROPIC_API_KEY"; exit 1; }
+	@$(KUBE) -n onramp create secret generic onramp-model-credentials \
+		--from-literal=ANTHROPIC_API_KEY="$$ANTHROPIC_API_KEY" --dry-run=client -o yaml \
+		| $(KUBE) apply -f -
+	$(KUBE) apply --server-side -k deploy/k8s/overlays/kind-agent
+
+# Restart a Deployment under API traffic and report every failed request.
+# make k8s-rollout-check [DEPLOYMENT=onramp-api]
+k8s-rollout-check:
+	ONRAMP_TOKEN=$$($(PY)/onramp-dev-token acme acme_operator) \
+		python3 deploy/k8s/kind/rollout_check.py $(or $(DEPLOYMENT),onramp-api)
 
 k8s-status:
 	$(KUBE) -n onramp get deployments,pods,scaledobjects,hpa,jobs

@@ -33,6 +33,8 @@ spec:
       containers:
         - name: event-consumer
           image: onramp-core
+          # Images are loaded into the node, never pulled.
+          imagePullPolicy: IfNotPresent
           command: ["onramp-event-consumer"]
           envFrom:
             - configMapRef:
@@ -107,6 +109,8 @@ spec:
       containers:
         - name: case-signal-consumer
           image: onramp-core
+          # Images are loaded into the node, never pulled.
+          imagePullPolicy: IfNotPresent
           command: ["onramp-case-signal-consumer"]
           envFrom:
             - configMapRef:
