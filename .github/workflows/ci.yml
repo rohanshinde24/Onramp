@@ -135,4 +135,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -t onramp:ci backend
+      - run: docker build --target core -t onramp-core:ci backend
+      - run: docker build --target ml -t onramp-ml:ci backend
+      # The core image must run its roles without the ml-only packages.
+      - run: docker run --rm --entrypoint python onramp-core:ci -c "import onramp.entrypoints.api, onramp.entrypoints.workflow_worker, onramp.entrypoints.event_consumer"

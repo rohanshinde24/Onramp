@@ -100,8 +100,8 @@ now owns a dedicated asyncio loop thread for Temporal client calls.
 
 The broad worker-role plan became a workflow queue plus an isolated agent queue. The agent worker
 is an opt-in Compose profile because it is the only role that needs model credentials. No live
-model call was made. The shared image still includes embedding and model dependencies for all
-roles and is about 785 MB; role-specific images remain Phase 19 work.
+model call was made. The shared image included embedding and model dependencies for all roles
+(about 785 MB then, 954 MB by Phase 18); Phase 19 split it into a core and an ml image.
 
 ### Dense retrieval was selected by evidence
 

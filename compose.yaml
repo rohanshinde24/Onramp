@@ -2,6 +2,20 @@
 # join through profiles as the phases that need them land.
 name: onramp
 
+# Two images from backend/Dockerfile. Services share them by tag, so one build serves every role.
+# Only the policy indexer and the agent worker need the ml image (embedding model, model SDK).
+x-core-image: &core-image
+  image: onramp-core:dev
+  build:
+    context: ./backend
+    target: core
+
+x-ml-image: &ml-image
+  image: onramp-ml:dev
+  build:
+    context: ./backend
+    target: ml
+
 services:
   postgres:
     image: postgres:16.10
@@ -68,7 +82,7 @@ services:
 
   migrate:
     profiles: ["app", "workflow", "agent"]
-    build: ./backend
+    <<: *core-image
     command: ["onramp-migrate"]
     environment: &app-env
       APP_ENV: local
@@ -87,7 +101,7 @@ services:
   api:
     profiles: ["app"]
     restart: unless-stopped
-    build: ./backend
+    <<: *core-image
     environment: *app-env
     ports:
       - "127.0.0.1:8000:8000"
@@ -98,7 +112,7 @@ services:
 
   kafka-topics:
     profiles: ["app"]
-    build: ./backend
+    <<: *core-image
     command: ["onramp-kafka-topics"]
     environment: *app-env
     depends_on:
@@ -107,7 +121,7 @@ services:
 
   policy-indexer:
     profiles: ["app", "agent"]
-    build: ./backend
+    <<: *ml-image
     command: ["sh", "-c", "onramp-load-policies /home/onramp/policies && onramp-policy-indexer"]
     environment:
       <<: *app-env
@@ -142,7 +156,7 @@ services:
   workflow-worker:
     profiles: ["workflow", "app"]
     restart: unless-stopped
-    build: ./backend
+    <<: *core-image
     command: ["onramp-workflow-worker"]
     environment: *app-env
     depends_on:
@@ -155,7 +169,7 @@ services:
   agent-worker:
     profiles: ["agent"]
     restart: unless-stopped
-    build: ./backend
+    <<: *ml-image
     command: ["onramp-agent-worker"]
     environment:
       <<: *app-env
@@ -175,7 +189,7 @@ services:
   outbox-publisher:
     profiles: ["app"]
     restart: unless-stopped
-    build: ./backend
+    <<: *core-image
     command: ["onramp-outbox-publisher"]
     environment: *app-env
     depends_on:
@@ -188,7 +202,7 @@ services:
   event-consumer:
     profiles: ["app"]
     restart: unless-stopped
-    build: ./backend
+    <<: *core-image
     command: ["onramp-event-consumer"]
     environment: *app-env
     depends_on:
@@ -203,7 +217,7 @@ services:
   case-signal-consumer:
     profiles: ["app"]
     restart: unless-stopped
-    build: ./backend
+    <<: *core-image
     command: ["onramp-case-signal-consumer"]
     environment: *app-env
     depends_on:
@@ -218,7 +232,7 @@ services:
   marketplace-relay:
     profiles: ["app"]
     restart: unless-stopped
-    build: ./backend
+    <<: *core-image
     command: ["onramp-outbox-publisher", "marketplace"]
     environment: *app-env
     depends_on:
@@ -250,7 +264,7 @@ services:
   # databases or the dev Temporal server. `make e2e` recreates those databases first.
   e2e-setup:
     profiles: ["e2e"]
-    build: ./backend
+    <<: *core-image
     command:
       ["sh", "-c", "onramp-migrate && onramp-load-policies /home/onramp/policies && onramp-seed"]
     environment: &e2e-env
@@ -277,7 +291,7 @@ services:
 
   api-e2e:
     profiles: ["e2e"]
-    build: ./backend
+    <<: *core-image
     environment: *e2e-env
     ports:
       - "127.0.0.1:8100:8000"
@@ -294,7 +308,7 @@ services:
 
   workflow-worker-e2e:
     profiles: ["e2e"]
-    build: ./backend
+    <<: *core-image
     command: ["onramp-workflow-worker"]
     environment: *e2e-env
     depends_on:

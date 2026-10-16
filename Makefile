@@ -1,7 +1,7 @@
 BACKEND := backend
 PY := $(BACKEND)/.venv/bin
 
-.PHONY: install lint format typecheck test test-integration test-kafka test-search check up down api-image migrate seed dlq-replay load-policies retrieval-eval case-eval adversarial-eval fault-eval compare baseline judgment-eval judgment-dataset promptfoo-view e2e e2e-up e2e-down observe observe-down
+.PHONY: install lint format typecheck test test-integration test-kafka test-search check up down images migrate seed dlq-replay load-policies retrieval-eval case-eval adversarial-eval fault-eval compare baseline judgment-eval judgment-dataset promptfoo-view e2e e2e-up e2e-down observe observe-down
 
 install:
 	python3.13 -m venv $(BACKEND)/.venv
@@ -37,8 +37,10 @@ up:
 down:
 	docker compose down
 
-api-image:
-	docker build -t onramp:dev $(BACKEND)
+# The two role images: core for most roles, ml for the policy indexer and agent worker.
+images:
+	docker build --target core -t onramp-core:dev $(BACKEND)
+	docker build --target ml -t onramp-ml:dev $(BACKEND)
 
 migrate:
 	$(PY)/onramp-migrate
