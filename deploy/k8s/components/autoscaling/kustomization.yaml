@@ -1,0 +1,14 @@
+# KEDA scales the two Kafka consumers on their consumer group lag (ADR-013). KEDA owns their
+# replica count, so the Deployments stop declaring one; apply with --server-side so a later
+# apply does not reset what KEDA set.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - consumers.yaml
+patches:
+  - target:
+      kind: Deployment
+      name: onramp-(event|case-signal)-consumer
+    patch: |
+      - op: remove
+        path: /spec/replicas

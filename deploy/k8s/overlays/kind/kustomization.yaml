@@ -1,0 +1,47 @@
+# The local kind environment (ADR-013). The only place that knows where the dependencies run:
+# Postgres, Kafka, Temporal, Elasticsearch and the observability backends stay under Compose,
+# and the kind node is attached to the Compose network, so pods use the Compose names.
+#
+# `make k8s-deploy` writes .generated/ (ignored): the image tags of this build and the Secret
+# values derived from .env. Build through make, not by hand.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Also places this overlay's generated Secret, so references to it get its hashed name.
+namespace: onramp
+resources:
+  - ../../base
+
+components:
+  - ../../components/autoscaling
+  - .generated
+
+configMapGenerator:
+  - name: onramp-config
+    behavior: merge
+    literals:
+      - APP_ENV=local
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:19092
+      - TEMPORAL_ADDRESS=temporal:7233
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - OTEL_BACKEND_ENDPOINT=http://observability:4318
+
+secretGenerator:
+  - name: onramp-secrets
+    envs:
+      - .generated/secrets.env
+    options:
+      labels:
+        app.kubernetes.io/component: config
+
+patches:
+  # Reachable from the host at 127.0.0.1:8180 through the kind port mapping.
+  - target:
+      kind: Service
+      name: onramp-api
+    patch: |
+      - op: add
+        path: /spec/type
+        value: NodePort
+      - op: add
+        path: /spec/ports/0/nodePort
+        value: 30080

@@ -14,6 +14,7 @@ superseded by a new record, never edited to reverse its decision.
 | [007](007-langgraph-investigator.md) | LangGraph investigator without checkpointing | Accepted; revisited in Phase 10, kept |
 | [008](008-action-gateway.md) | Deterministic Action Gateway | Accepted |
 | [009](009-eval-artifacts.md) | Evaluation artifact format | Accepted |
-| [010](010-process-roles-and-kubernetes.md) | Process roles now, Kubernetes at Phase 19 | Accepted |
+| [010](010-process-roles-and-kubernetes.md) | Process roles now, Kubernetes at Phase 19 | Accepted; images split in 013 |
 | [011](011-dense-policy-retrieval.md) | Dense retrieval as the default policy retriever | Accepted |
 | [012](012-operator-console.md) | Operator console as a server-rendered client of the API | Accepted |
+| [013](013-kubernetes-packaging.md) | Kubernetes packaging on kind with Kustomize | Accepted; refines the single image of 010 |

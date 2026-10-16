@@ -1,0 +1,50 @@
+# Lag is read from Kafka directly, over every topic the group has committed offsets for.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: onramp-event-consumer
+spec:
+  scaleTargetRef:
+    name: onramp-event-consumer
+  # Never zero: the consumer must be running to record evidence and wake workflows promptly.
+  minReplicaCount: 1
+  # Topics have three partitions; a fourth consumer would hold none.
+  maxReplicaCount: 3
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 120
+  triggers:
+    - type: kafka
+      metadata:
+        bootstrapServersFromEnv: KAFKA_BOOTSTRAP_SERVERS
+        consumerGroup: onramp-case-evidence
+        # Target lag per replica. One replica handles a message at a time.
+        lagThreshold: "20"
+        offsetResetPolicy: earliest
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: onramp-case-signal-consumer
+spec:
+  scaleTargetRef:
+    name: onramp-case-signal-consumer
+  # Never zero: the consumer must be running to record evidence and wake workflows promptly.
+  minReplicaCount: 1
+  # Topics have three partitions; a fourth consumer would hold none.
+  maxReplicaCount: 3
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 120
+  triggers:
+    - type: kafka
+      metadata:
+        bootstrapServersFromEnv: KAFKA_BOOTSTRAP_SERVERS
+        consumerGroup: onramp-case-signals
+        # Target lag per replica. One replica handles a message at a time.
+        lagThreshold: "20"
+        offsetResetPolicy: earliest

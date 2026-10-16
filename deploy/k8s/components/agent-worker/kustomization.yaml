@@ -1,0 +1,7 @@
+# The agent worker, opt-in (ADR-013). It is the only role that calls a model, so it is left out
+# unless someone adds this component and creates the onramp-model-credentials Secret with their
+# own ANTHROPIC_API_KEY. KEDA scales it from zero on the agent task queue's backlog.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - agent-worker.yaml

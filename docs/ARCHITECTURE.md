@@ -96,7 +96,7 @@ backend/src/onramp/
                    agent_worker, policy_indexer, case_eval, retrieval_eval
 eval/              versioned scenario, truth, script and retrieval datasets
 frontend/          Next.js console
-deploy/            compose files now; Kubernetes manifests from Phase 19
+deploy/            Postgres init, observability config, Kubernetes manifests (deploy/k8s)
 ```
 
 Dependency direction: `entrypoints -> workflows -> {agent, actions, checks, cases} ->
@@ -190,8 +190,25 @@ walkthrough are in `docs/OPERATIONS.md`.
 
 Docker Compose with profiles for local work: the default profile is Postgres only; `events`,
 `search`, `workflow` and `observability` profiles add Kafka, Elasticsearch, Temporal and the
-telemetry stack. Kubernetes arrives in Phase 19 once the process roles above all exist and run.
-See ADR-010.
+telemetry stack, and `app` runs the roles too.
+
+The roles also run on Kubernetes (kind locally, ADR-013), packaged with Kustomize under
+`deploy/k8s/`: a base with every role, an opt-in agent worker component, a KEDA autoscaling
+component and a kind overlay that holds the only dependency addresses and secrets. Postgres,
+Kafka, Elasticsearch, Temporal and the telemetry backends stay outside the cluster. Two images
+serve every role: `core`, and `ml` with the embedding model, model SDK and policy corpus for
+the policy indexer and agent worker.
+
+| Role | Image | Replicas | Probes | Scales on |
+|---|---|---|---|---|
+| onramp-api | core | 2, PodDisruptionBudget | `/healthz`, `/readyz` (both databases) on 8000 | n/a |
+| onramp-outbox-publisher, onramp-marketplace-relay | core | 1 | loop heartbeat on 8081 | n/a |
+| onramp-event-consumer, onramp-case-signal-consumer | core | 1 to 3 | loop heartbeat on 8081 | consumer group lag (KEDA) |
+| onramp-workflow-worker | core | 1 | worker heartbeat on 8081 | n/a |
+| onramp-agent-worker (opt-in) | ml | 0 to 3 | worker heartbeat on 8081 | agent task queue backlog (KEDA) |
+| onramp-setup Job | core, ml | runs before each rollout | n/a | n/a |
+
+See ADR-010 and ADR-013, and `docs/OPERATIONS.md` for running it.
 
 ## Decision index
 
@@ -209,3 +226,4 @@ See ADR-010.
 | 010 | Process roles now, Kubernetes at Phase 19 |
 | 011 | Dense retrieval as the default policy retriever |
 | 012 | Operator console as a server-rendered client of the API |
+| 013 | Kubernetes packaging on kind with Kustomize, KEDA on lag and backlog |

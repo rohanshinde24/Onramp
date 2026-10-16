@@ -1,7 +1,7 @@
 BACKEND := backend
 PY := $(BACKEND)/.venv/bin
 
-.PHONY: install lint format typecheck test test-integration test-kafka test-search check up down images migrate seed dlq-replay load-policies retrieval-eval case-eval adversarial-eval fault-eval compare baseline judgment-eval judgment-dataset promptfoo-view e2e e2e-up e2e-down observe observe-down
+.PHONY: install lint format typecheck test test-integration test-kafka test-search check up down images migrate seed dlq-replay load-policies retrieval-eval case-eval adversarial-eval fault-eval compare baseline judgment-eval judgment-dataset promptfoo-view e2e e2e-up e2e-down observe observe-down k8s-up k8s-deploy k8s-status k8s-down
 
 install:
 	python3.13 -m venv $(BACKEND)/.venv
@@ -40,7 +40,7 @@ down:
 # The two role images: core for most roles, ml for the policy indexer and agent worker.
 images:
 	docker build --target core -t onramp-core:dev $(BACKEND)
-	docker build --target ml -t onramp-ml:dev $(BACKEND)
+	docker build --target ml --build-context policies=policies -t onramp-ml:dev $(BACKEND)
 
 migrate:
 	$(PY)/onramp-migrate
@@ -150,3 +150,40 @@ observe:
 
 observe-down:
 	docker compose --profile observability --profile app stop
+
+# Local Kubernetes on kind (ADR-013). Dependencies stay under Compose; the roles move into the
+# cluster. `make k8s-up` once starts the dependencies, stops the Compose role containers so two
+# copies never share the queues, and creates the cluster with KEDA; `make k8s-deploy` after
+# every change. The API is at http://127.0.0.1:8180. `make k8s-down` removes the cluster only.
+KIND_CLUSTER := onramp
+KUBE := kubectl --context kind-$(KIND_CLUSTER)
+K8S_OVERLAY := deploy/k8s/overlays/kind
+KEDA_VERSION := 2.21.0
+K8S_DEPENDENCIES := postgres kafka elasticsearch temporal observability
+k8s-up:
+	docker compose --profile app --profile observability up -d --wait $(K8S_DEPENDENCIES)
+	docker compose stop $(ONRAMP_ROLES)
+	kind get clusters | grep -qx $(KIND_CLUSTER) || kind create cluster --config deploy/k8s/kind/cluster.yaml
+	# Pods reach Postgres, Kafka, Temporal and Elasticsearch by their Compose names.
+	docker network inspect onramp_default --format '{{range .Containers}}{{.Name}} {{end}}' \
+		| grep -q $(KIND_CLUSTER)-control-plane \
+		|| docker network connect onramp_default $(KIND_CLUSTER)-control-plane
+	$(KUBE) apply --server-side -f \
+		https://github.com/kedacore/keda/releases/download/v$(KEDA_VERSION)/keda-$(KEDA_VERSION).yaml
+	$(KUBE) -n keda rollout status deployment --timeout=180s
+
+k8s-deploy: images
+	KIND_CLUSTER=$(KIND_CLUSTER) deploy/k8s/kind/prepare.sh
+	# The setup Job runs before the roles roll: migrations, topics, policy load and index.
+	$(KUBE) -n onramp delete job -l app.kubernetes.io/component=setup --ignore-not-found
+	$(KUBE) kustomize $(K8S_OVERLAY) > /dev/null
+	$(KUBE) apply --server-side -k $(K8S_OVERLAY) -l 'app.kubernetes.io/component in (config,setup)'
+	$(KUBE) -n onramp wait --for=condition=complete job/onramp-setup --timeout=600s
+	$(KUBE) apply --server-side -k $(K8S_OVERLAY)
+	$(KUBE) -n onramp rollout status deployment --timeout=300s
+
+k8s-status:
+	$(KUBE) -n onramp get deployments,pods,scaledobjects,hpa,jobs
+
+k8s-down:
+	kind delete cluster --name $(KIND_CLUSTER)

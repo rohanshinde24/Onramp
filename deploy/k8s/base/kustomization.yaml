@@ -1,0 +1,50 @@
+# Every Onramp process role and the one-off setup Job, with no environment in it: dependency
+# addresses, secrets and image tags come from an overlay (ADR-013).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: onramp
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: onramp
+    includeSelectors: false
+
+resources:
+  - namespace.yaml
+  - setup-job.yaml
+  - api.yaml
+  - publishers.yaml
+  - consumers.yaml
+  - workflow-worker.yaml
+  - collector.yaml
+
+# The generated name carries a content hash, so a change here rolls every pod that reads it.
+configMapGenerator:
+  - name: onramp-config
+    options:
+      labels:
+        app.kubernetes.io/component: config
+    literals:
+      - LOG_LEVEL=INFO
+      - HEALTH_PORT=8081
+      - TEMPORAL_NAMESPACE=default
+      - TEMPORAL_WORKFLOW_TASK_QUEUE=onramp-workflows
+      - TEMPORAL_AGENT_TASK_QUEUE=onramp-agent
+      - KAFKA_TOPIC_PARTITIONS=3
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      # The image bakes the embedding model; no role downloads at runtime.
+      - HF_HUB_OFFLINE=1
+      - PYTHONDONTWRITEBYTECODE=1
+
+  # Hash-named too, so a collector configuration change restarts the collector.
+  - name: otel-collector
+    files:
+      - config.yaml=collector-config.yaml
+
+images:
+  - name: onramp-core
+    newName: onramp-core
+    newTag: dev
+  - name: onramp-ml
+    newName: onramp-ml
+    newTag: dev

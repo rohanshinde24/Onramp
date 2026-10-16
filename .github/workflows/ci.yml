@@ -136,6 +136,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker build --target core -t onramp-core:ci backend
-      - run: docker build --target ml -t onramp-ml:ci backend
+      - run: docker build --target ml --build-context policies=policies -t onramp-ml:ci backend
+      # The Kubernetes base must render; the kind overlay needs a local build to render.
+      - run: kubectl kustomize deploy/k8s/base > /dev/null
       # The core image must run its roles without the ml-only packages.
       - run: docker run --rm --entrypoint python onramp-core:ci -c "import onramp.entrypoints.api, onramp.entrypoints.workflow_worker, onramp.entrypoints.event_consumer"

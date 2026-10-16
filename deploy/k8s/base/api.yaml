@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: onramp-api
+  labels:
+    app.kubernetes.io/name: onramp-api
+    app.kubernetes.io/component: api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: onramp-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: onramp-api
+    spec:
+      automountServiceAccountToken: false
+      # preStop (5 s) plus uvicorn's graceful shutdown (20 s) plus slack.
+      terminationGracePeriodSeconds: 35
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          image: onramp-core
+          command: ["onramp-api"]
+          envFrom:
+            - configMapRef:
+                name: onramp-config
+            - secretRef:
+                name: onramp-secrets
+          ports:
+            - name: http
+              containerPort: 8000
+          startupProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # Readiness checks both databases: a pod that cannot reach them takes no requests.
+          readinessProbe:
+            httpGet: {path: /readyz, port: http}
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          lifecycle:
+            # Keep serving while the endpoint is removed from the Service, then let uvicorn
+            # drain. Without this, requests already routed here are refused.
+            preStop:
+              sleep:
+                seconds: 5
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {memory: 512Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: onramp-api
+  labels:
+    app.kubernetes.io/name: onramp-api
+spec:
+  selector:
+    app.kubernetes.io/name: onramp-api
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: onramp-api
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: onramp-api

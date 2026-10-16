@@ -2,8 +2,9 @@
 #
 #   core: every role that does not embed text or call a model (API, migrations, publishers,
 #         consumers, workflow worker, policy loading).
-#   ml:   core plus the embedding model and the model provider SDK, for the policy indexer and
-#         the agent worker.
+#   ml:   core plus the embedding model, the model provider SDK and the policy corpus, for the
+#         policy indexer and the agent worker. Build it with the corpus as a named context:
+#         docker build --target ml --build-context policies=policies backend
 #
 # The optional dependencies are imported lazily, so a core role never needs them; a unit test
 # imports each core entrypoint with them blocked.
@@ -27,6 +28,8 @@ EXPOSE 8000
 
 FROM runtime AS ml
 COPY --from=build-ml /install-ml /usr/local
+# The corpus is loaded into Postgres at deploy time, like migrations, so it ships with the code.
+COPY --from=policies --chown=onramp . /home/onramp/policies
 USER onramp
 ENV FASTEMBED_CACHE_PATH=/home/onramp/models \
     HF_HUB_OFFLINE=0
