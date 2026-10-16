@@ -8,6 +8,7 @@ from onramp.api import (
     approvals,
     cases,
     checks,
+    evidence,
     health,
     investigations,
     me,
@@ -39,5 +40,6 @@ def create_app(
         app.include_router(checks.router)
         app.include_router(investigations.router)
         app.include_router(actions.router)
+        app.include_router(evidence.router)
     FastAPIInstrumentor.instrument_app(app, excluded_urls="healthz,readyz")
     return app

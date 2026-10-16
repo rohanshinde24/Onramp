@@ -97,6 +97,7 @@ def build_client(
             EvidenceRequester(SqlMarketplaceWriter(marketplace_sessions, clock=now)),
             now,
         ),
+        marketplace=reader,
         workflows=workflows,
     )
     return TestClient(create_app(services))

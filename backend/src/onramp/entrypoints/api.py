@@ -62,6 +62,7 @@ def main() -> None:
             marketplace_reader,
             EvidenceRequester(SqlMarketplaceWriter(marketplace_sessions)),
         ),
+        marketplace=marketplace_reader,
         workflows=workflows,
     )
     app = create_app(

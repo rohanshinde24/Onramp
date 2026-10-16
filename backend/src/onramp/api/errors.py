@@ -14,6 +14,7 @@ from onramp.approvals.service import (
     NotAwaitingApprovalError,
     SelfApprovalError,
 )
+from onramp.cases.evidence import EvidenceUnavailableError
 from onramp.cases.queries import CaseNotFoundError
 from onramp.cases.service import (
     IntakeKeyConflictError,
@@ -51,6 +52,7 @@ _STATUS: dict[type[Exception], tuple[int, str]] = {
     AlreadyDecidedError: (status.HTTP_409_CONFLICT, "already_decided"),
     ContentMismatchError: (status.HTTP_409_CONFLICT, "content_mismatch"),
     SelfApprovalError: (status.HTTP_403_FORBIDDEN, "self_approval"),
+    EvidenceUnavailableError: (status.HTTP_409_CONFLICT, "evidence_unavailable"),
 }
 
 

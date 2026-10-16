@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from onramp.approvals.service import ApprovalService
 from onramp.cases.service import CaseService
 from onramp.checks.service import CheckService
+from onramp.marketplace.reader import MarketplaceReader
 from onramp.proposals.service import ProposalService
 from onramp.workflows.client import CaseCoordinator
 
@@ -26,4 +27,5 @@ class AppServices:
     proposals: ProposalService
     approvals: ApprovalService
     checks: CheckService
+    marketplace: MarketplaceReader
     workflows: CaseCoordinator | None = None

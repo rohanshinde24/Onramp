@@ -13,6 +13,7 @@ from onramp.actions.models import ExecutedAction, ExecutionStatus
 from onramp.approvals.models import Approval, Decision
 from onramp.audit.service import Actor, record_audit
 from onramp.cases.escalation import EscalationReason
+from onramp.cases.evidence import EvidenceUnavailableError, case_records
 from onramp.cases.models import CaseType, SupportCase
 from onramp.cases.resolutions import ACTION_RISK, ActionType, ResolutionCode, required_action
 from onramp.cases.service import transition
@@ -366,45 +367,10 @@ class ActionGateway:
             )
 
     def _reachable_refs(self, case: SupportCase) -> set[str]:
-        tenant = case.tenant_id
-        refs: set[str] = set()
-        worker = self._marketplace.get_worker(tenant, case.worker_id)
-        if worker is None:
-            raise GatewayRejectedError("worker_not_found")
-        refs.add(worker.ref)
-
-        case_type = CaseType(case.case_type)
-        if case_type is CaseType.ONBOARDING:
-            refs.update(r.ref for r in self._marketplace.get_verifications(tenant, worker.id))
-            refs.update(r.ref for r in self._marketplace.get_documents(tenant, worker.id))
-            return refs
-
-        if case_type is CaseType.QUALITY_REVIEW:
-            review = self._marketplace.get_quality_review(tenant, case.subject_id)
-            if review is None:
-                raise GatewayRejectedError("review_not_found")
-            refs.add(review.ref)
-            submission_id = review.submission_id
-        else:
-            submission_id = case.subject_id
-        submission = self._marketplace.get_submission(tenant, submission_id)
-        if submission is None:
-            raise GatewayRejectedError("submission_not_found")
-        assignment = self._marketplace.get_assignment(tenant, submission.assignment_id)
-        if assignment is None or assignment.worker_id != case.worker_id:
-            raise GatewayRejectedError("subject_identity_mismatch")
-        task = self._marketplace.get_task(tenant, assignment.task_id)
-        if task is None:
-            raise GatewayRejectedError("task_not_found")
-        refs.update({submission.ref, assignment.ref, task.ref})
-        refs.update(r.ref for r in self._marketplace.get_quality_reviews(tenant, submission.id))
-        if case_type is CaseType.PAYOUT:
-            for payment in self._marketplace.get_payments_for_submission(tenant, submission.id):
-                refs.add(payment.ref)
-                refs.update(
-                    event.ref for event in self._marketplace.get_payment_events(tenant, payment.id)
-                )
-        return refs
+        try:
+            return {record.ref for record in case_records(self._marketplace, case)}
+        except EvidenceUnavailableError as exc:
+            raise GatewayRejectedError(exc.code) from exc
 
     def _payout_request(
         self, case: SupportCase, proposal: Proposal, policy: PolicyContext
