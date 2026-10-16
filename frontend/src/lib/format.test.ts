@@ -48,5 +48,8 @@ describe("errors", () => {
     expect(describeError("content_mismatch", null)).toMatch(/proposal changed/);
     expect(describeError("weird_thing", null)).toBe("weird thing");
     expect(describeError("constructor", null)).toBe("constructor");
+    expect(describeError("http_422", "[currency]")).toBe(
+      "The API refused the request as malformed. ([currency])",
+    );
   });
 });

@@ -13,6 +13,8 @@ const MESSAGES: Record<string, string> = {
   checks_not_applicable: "Checks cannot run in the case's current state.",
   no_applicable_policy: "No policy version was in force at the incident time.",
   evidence_unavailable: "A marketplace record this case depends on is missing.",
+  // FastAPI's own request validation, before any of Onramp's rules ran.
+  http_422: "The API refused the request as malformed.",
 };
 
 export function describeError(code: string, detail: string | null): string {
