@@ -28,9 +28,16 @@ from onramp.evaluation.spend import SpendCapReachedError
 
 RECORD_SCHEMA_VERSION = 1
 
-LIMITATIONS = (
+_SCRIPTED = (
     "Investigations are scripted; the run measures the application around the model, not any "
-    "model's judgment. Token counts and investigation latency are therefore not meaningful.",
+    "model's judgment. Token counts and investigation latency are therefore not meaningful."
+)
+_LIVE = (
+    "Investigations use the live model named in the manifest. Each answer is recorded, and a "
+    "rerun replays recorded answers instead of calling the model again; cost_usd counts every "
+    "answer and paid_this_run_usd only new calls."
+)
+_COMMON = (
     "A scripted reviewer accepts every proposal and approves every action as shown, so the run "
     "measures what the system recommends and executes when nobody overrides it.",
     "Waits end at their deadline on a virtual clock. Temporal timers, signals and recovery are "
@@ -40,6 +47,11 @@ LIMITATIONS = (
     "I wrote the worlds, the labels and the scripts; this checks behavior, it is not an "
     "independent benchmark.",
 )
+
+
+def limitations(*, live_model: bool) -> list[str]:
+    """What a run's numbers do not show, stated in its manifest."""
+    return [_LIVE if live_model else _SCRIPTED, *_COMMON]
 
 
 def git_state(root: Path) -> tuple[str, bool]:

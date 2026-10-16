@@ -37,7 +37,7 @@ from onramp.db.engine import make_engine, make_session_factory
 from onramp.evaluation.batching import AnthropicBatchSubmitter, record_investigations
 from onramp.evaluation.faults import ScenarioFaults, load_faults, no_faults
 from onramp.evaluation.recordings import RecordedModel, RecordingKey, RecordingStore
-from onramp.evaluation.report import LIMITATIONS, gate_failures, git_state, run_cases
+from onramp.evaluation.report import gate_failures, git_state, limitations, run_cases
 from onramp.evaluation.reviewers import honest_reviewers, load_reviewers
 from onramp.evaluation.runner import CaseEvaluationRunner
 from onramp.evaluation.scenarios import ScenarioSet, load_scenarios, validate_truth
@@ -283,7 +283,8 @@ def main() -> None:
             for name, path in (
                 ("scenarios", args.scenarios),
                 ("truth", args.truth),
-                ("scripts", args.scripts),
+                # A live model run never reads the scripts.
+                ("scripts", None if args.model else args.scripts),
                 ("reviewers", args.reviewers),
                 ("faults", args.faults),
             )
@@ -302,7 +303,7 @@ def main() -> None:
         "prompt_version": args.prompt,
         "retriever": "keyword_in_force",
         "reviewer": "per scenario" if args.reviewers else "honest: accepts and approves as shown",
-        "limitations": list(LIMITATIONS),
+        "limitations": limitations(live_model=bool(args.model)),
     }
     if args.batch and settings.anthropic_api_key is not None:
         manifest["batch"] = _record_in_batches(
