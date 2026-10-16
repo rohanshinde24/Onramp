@@ -198,9 +198,12 @@ The scenario format also gained `subject_id` (what the reporter names) and an op
   including live-model runs, said investigations were scripted; live runs now say what they
   are. The two live baselines stored before the fix keep their original manifests, and the
   console flags the wrong line on them.
-* Deferred: an automated browser test of the console against a running API (verified by hand
-  for this phase), an assignee filter in the inbox (nothing assigns cases yet), queue counts
-  above 100, and an admin view of audit history across cases (admins see each case's timeline).
+* The hand-verified flow is now a Playwright test (`make e2e`) against its own Compose stack
+  and databases: operator accept, the high-risk approval refused to the operator, lead approval
+  through Temporal and the gateway to resolved, a stale manual proposal refused with nothing
+  written, and another tenant's case not found. The API outage page is still checked by hand.
+* Deferred: an assignee filter in the inbox (nothing assigns cases yet), queue counts above
+  100, and an admin view of audit history across cases (admins see each case's timeline).
 
 ## Deferred evaluation work
 

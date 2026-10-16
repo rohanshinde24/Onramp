@@ -1,7 +1,7 @@
 BACKEND := backend
 PY := $(BACKEND)/.venv/bin
 
-.PHONY: install lint format typecheck test test-integration test-kafka test-search check up down api-image migrate seed dlq-replay load-policies retrieval-eval case-eval adversarial-eval fault-eval compare baseline judgment-eval judgment-dataset promptfoo-view
+.PHONY: install lint format typecheck test test-integration test-kafka test-search check up down api-image migrate seed dlq-replay load-policies retrieval-eval case-eval adversarial-eval fault-eval compare baseline judgment-eval judgment-dataset promptfoo-view e2e e2e-up e2e-down
 
 install:
 	python3.13 -m venv $(BACKEND)/.venv
@@ -108,3 +108,25 @@ promptfoo-view:
 		npx -y promptfoo@0.123.1 eval -c artifacts/promptfoo/promptfooconfig.yaml --no-cache \
 		-o artifacts/promptfoo/view.json \
 		|| test $$? -eq 100  # 100: some cases were answered wrong, which the view shows
+
+# Browser end-to-end test of the console against its own stack: an API, workflow worker and
+# in-memory Temporal on fresh onramp_e2e and marketplace_e2e databases, seeded each run. The dev
+# databases and dev Temporal are never touched. The stack stays up afterwards for debugging;
+# `make e2e-down` removes it. Needs Docker and the Playwright browser (`npx playwright install
+# chromium` in frontend/).
+E2E_COMPOSE := docker compose --profile e2e
+E2E_SERVICES := e2e-setup temporal-e2e api-e2e workflow-worker-e2e
+e2e-up:
+	docker compose up -d --wait postgres
+	$(E2E_COMPOSE) rm -sf $(E2E_SERVICES)
+	for db in onramp_e2e marketplace_e2e; do \
+		docker compose exec -T postgres psql -U onramp -d postgres -q -v ON_ERROR_STOP=1 \
+			-c "DROP DATABASE IF EXISTS $$db WITH (FORCE)" -c "CREATE DATABASE $$db" || exit 1; \
+	done
+	$(E2E_COMPOSE) up -d --build --wait temporal-e2e api-e2e workflow-worker-e2e
+
+e2e: e2e-up
+	cd frontend && PATH="$(NODE_BIN):$$PATH" npm run test:e2e
+
+e2e-down:
+	$(E2E_COMPOSE) rm -sf $(E2E_SERVICES)

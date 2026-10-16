@@ -48,7 +48,7 @@ Phases 0 through 17 are complete. What works today:
 * an operator console: an inbox split by what each case needs from a person, and a case page
   with the decision, investigation trajectory, checks, the policy version in force with every
   cited passage, the marketplace evidence, approvals, gateway results and the audit timeline;
-  plus a view of stored evaluation runs
+  plus a view of stored evaluation runs, and a browser end-to-end test of its decisions
 
 Not built yet: full observability, Kubernetes packaging, final scale
 benchmarks, and AWS staging. The reference, adversarial and fault suites use
@@ -102,3 +102,24 @@ Open `localhost:3000` and sign in with a token from
 `backend/.venv/bin/onramp-dev-token acme acme_operator` (or `acme_lead` to approve payouts).
 Set `ONRAMP_API_URL` if the API is elsewhere. `npm test`, `npm run lint`, `npm run typecheck`
 and `npm run build` are the console's checks.
+
+Browser end-to-end test of the console (Playwright, Chromium):
+
+```sh
+cd frontend && nvm use && npm ci && npx playwright install chromium && cd ..
+make e2e        # fresh e2e stack, then npm run test:e2e
+make e2e-down   # remove the e2e stack
+```
+
+`make e2e` drops and recreates the `onramp_e2e` and `marketplace_e2e` databases on the Compose
+PostgreSQL, then starts the `e2e` Compose profile: a one-off container that migrates, loads the
+policy corpus and seeds them, an in-memory Temporal server, and an API (port 8100) and workflow
+worker over those databases. The dev databases, the dev Temporal server and a running dev
+console are never touched, so it can run next to `npm run dev`. Playwright builds the console
+and serves it on port 3100 against that API, and signs in with tokens from
+`onramp-dev-token`. The tests cover an operator accepting a payout proposal, the operator
+being refused the high-risk approval in the console and by the API, a lead approving it and
+the workflow and Action Gateway resolving the case; a manual proposal from a stale page refused
+with the "case changed" message and no proposal written; and another tenant's case rendering
+as not found. Each run needs the fresh world `make e2e` seeds; `npm run test:e2e` alone reruns
+the tests against the stack as it is, and fails on cases a previous run already decided.

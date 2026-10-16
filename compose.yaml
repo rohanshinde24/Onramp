@@ -225,6 +225,64 @@ services:
         condition: service_completed_successfully
     stop_grace_period: 30s
 
+  # Browser end-to-end stack (`make e2e`): its own API, workflow worker and in-memory Temporal
+  # over the onramp_e2e and marketplace_e2e databases, so a run never reads or writes the dev
+  # databases or the dev Temporal server. `make e2e` recreates those databases first.
+  e2e-setup:
+    profiles: ["e2e"]
+    build: ./backend
+    command:
+      ["sh", "-c", "onramp-migrate && onramp-load-policies /home/onramp/policies && onramp-seed"]
+    environment: &e2e-env
+      <<: *app-env
+      DATABASE_URL: postgresql+psycopg://onramp:${POSTGRES_PASSWORD:-onramp-local}@postgres:5432/onramp_e2e
+      MARKETPLACE_DATABASE_URL: postgresql+psycopg://onramp:${POSTGRES_PASSWORD:-onramp-local}@postgres:5432/marketplace_e2e
+      TEMPORAL_ADDRESS: temporal-e2e:7233
+    volumes:
+      - ./policies:/home/onramp/policies:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  temporal-e2e:
+    profiles: ["e2e"]
+    image: temporalio/temporal:1.9.1
+    # No database file: workflow history lives in memory and is gone with the container.
+    command: ["server", "start-dev", "--ip", "0.0.0.0", "--headless"]
+    healthcheck:
+      test: ["CMD", "temporal", "operator", "cluster", "health", "--address", "127.0.0.1:7233"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+
+  api-e2e:
+    profiles: ["e2e"]
+    build: ./backend
+    environment: *e2e-env
+    ports:
+      - "127.0.0.1:8100:8000"
+    depends_on:
+      e2e-setup:
+        condition: service_completed_successfully
+      temporal-e2e:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz')"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  workflow-worker-e2e:
+    profiles: ["e2e"]
+    build: ./backend
+    command: ["onramp-workflow-worker"]
+    environment: *e2e-env
+    depends_on:
+      e2e-setup:
+        condition: service_completed_successfully
+      temporal-e2e:
+        condition: service_healthy
+
 volumes:
   postgres-data:
   temporal-data:
