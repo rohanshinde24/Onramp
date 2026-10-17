@@ -15,6 +15,11 @@ with workflow.unsafe.imports_passed_through():
     )
 
 _ACTIVITY_TIMEOUT = timedelta(minutes=2)
+_READ_TIMEOUT = timedelta(seconds=30)
+# Workflows started before this patch replay on the original loop; new ones take the loop with
+# fewer server round trips. Remove the original loop once no workflow started before it is
+# still open.
+REUSE_SNAPSHOTS_PATCH = "reuse-activity-snapshots"
 ACTIVITY_RETRY = RetryPolicy(maximum_attempts=5)
 # A provider outage can outlast any fixed number of attempts. The case keeps waiting in
 # INVESTIGATING, retried with capped backoff, until the provider answers or a person acts.
@@ -42,6 +47,72 @@ class CaseWorkflow:
 
     @workflow.run
     async def run(self, request: CaseWorkflowInput) -> WorkflowResult:
+        if workflow.patched(REUSE_SNAPSHOTS_PATCH):
+            return await self._run(request)
+        return await self._run_before_patch(request)
+
+    async def _run(self, request: CaseWorkflowInput) -> WorkflowResult:
+        """Each step's activity returns the case as it left it, so the loop decides on that
+        instead of reading again, and the reads that remain (at start and after a wake) are
+        local activities, which complete inside the workflow task. A case that checks settle
+        costs one activity and two workflow tasks on the server instead of three and four.
+
+        ``observed_signals`` is taken before the call whose snapshot decides a wait. A signal
+        that lands during that call moves the wake counter past it, so the wait returns at once
+        and the case is read again: the lost-wake rule holds.
+        """
+        observed_signals = self._wake_version
+        snapshot = await self._read_case(request)
+        while True:
+            state = CaseState(snapshot.state)
+            if state in {CaseState.RESOLVED, CaseState.CLOSED_NO_ACTION}:
+                return WorkflowResult(state.value, tuple(sorted(self._seen_signal_ids)))
+            if state in _PASSIVE_STATES:
+                self._waiting_version = observed_signals
+                await workflow.wait_condition(self._has_new_signal)
+                observed_signals = self._wake_version
+                snapshot = await self._read_case(request)
+                continue
+            if state is CaseState.WAITING_FOR_SETTLEMENT:
+                await self._wait_for_signal_or_deadline(snapshot, observed_signals)
+                observed_signals = self._wake_version
+                snapshot = await self._activity("resume_settlement_checks", request)
+                continue
+            if state is CaseState.WAITING_FOR_EVIDENCE:
+                await self._wait_for_signal_or_deadline(snapshot, observed_signals)
+                observed_signals = self._wake_version
+                snapshot = await self._activity("expire_evidence_wait", request)
+                continue
+            observed_signals = self._wake_version
+            if state in {CaseState.CREATED, CaseState.INITIAL_CHECKS}:
+                snapshot = await self._activity("run_case_checks", request)
+            elif state is CaseState.INVESTIGATING:
+                snapshot = await self._activity(
+                    "run_investigation",
+                    request,
+                    task_queue=request.agent_task_queue,
+                    retry_policy=INVESTIGATION_RETRY,
+                )
+            elif state is CaseState.EXECUTING:
+                snapshot = await self._activity("execute_approved_action", request)
+            elif state is CaseState.VERIFYING:
+                snapshot = await self._activity("recover_action_verification", request)
+            else:
+                raise RuntimeError(f"unsupported case state {state.value}")
+
+    async def _read_case(self, request: CaseWorkflowInput) -> CaseSnapshot:
+        return cast(
+            CaseSnapshot,
+            await workflow.execute_local_activity(
+                "read_case",
+                request,
+                start_to_close_timeout=_READ_TIMEOUT,
+                retry_policy=ACTIVITY_RETRY,
+                result_type=CaseSnapshot,
+            ),
+        )
+
+    async def _run_before_patch(self, request: CaseWorkflowInput) -> WorkflowResult:
         while True:
             observed_signals = self._wake_version
             snapshot = await self._activity("read_case", request)

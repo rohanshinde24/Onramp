@@ -73,6 +73,9 @@ def test_signal_waits_in_history_across_worker_restart() -> None:
                 task_queue=WORKFLOW_TASK_QUEUE,
                 workflows=[CaseWorkflow],
                 activities=[plan.read_case],
+                # No sticky cache: the time-skipping test server does not move a stopped
+                # worker's sticky tasks back to the shared queue, which a real server does.
+                max_cached_workflows=0,
             ):
                 handle = await environment.client.start_workflow(
                     CaseWorkflow.run,
@@ -89,6 +92,9 @@ def test_signal_waits_in_history_across_worker_restart() -> None:
                 task_queue=WORKFLOW_TASK_QUEUE,
                 workflows=[CaseWorkflow],
                 activities=[plan.read_case],
+                # No sticky cache: the time-skipping test server does not move a stopped
+                # worker's sticky tasks back to the shared queue, which a real server does.
+                max_cached_workflows=0,
             ):
                 result = await handle.result()
 
@@ -112,7 +118,8 @@ class _TimerPlan:
     @activity.defn(name="resume_settlement_checks")
     async def resume_settlement_checks(self, _: CaseWorkflowInput) -> CaseSnapshot:
         self.resumed = True
-        return CaseSnapshot(CaseState.INITIAL_CHECKS.value)
+        # Like the real activities, return the case as this activity left it.
+        return await self.read_case(_)
 
 
 def test_settlement_deadline_uses_time_skipping() -> None:
@@ -196,7 +203,7 @@ class _FlakyProviderPlan:
         self.attempts += 1
         if self.attempts < 3:
             raise InvestigationUnavailableError("provider down")
-        return CaseSnapshot(CaseState.PROPOSED.value)
+        return await self.read_case(_)
 
 
 def test_provider_failure_is_retried_with_backoff_not_a_tight_loop() -> None:
