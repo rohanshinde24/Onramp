@@ -1,7 +1,7 @@
 BACKEND := backend
 PY := $(BACKEND)/.venv/bin
 
-.PHONY: install lint format typecheck test test-integration test-kafka test-search check up down images migrate seed dlq-replay load-policies retrieval-eval case-eval adversarial-eval fault-eval compare baseline judgment-eval judgment-dataset promptfoo-view e2e e2e-up e2e-down observe observe-down k8s-up k8s-deploy k8s-agent k8s-rollout-check k8s-status k8s-down
+.PHONY: install lint format typecheck test test-integration test-kafka test-search check up down images migrate seed dlq-replay load-policies retrieval-eval case-eval adversarial-eval fault-eval compare baseline judgment-eval judgment-dataset promptfoo-view e2e e2e-up e2e-down observe observe-down k8s-up k8s-deploy k8s-agent k8s-rollout-check k8s-status k8s-down load-test
 
 install:
 	python3.13 -m venv $(BACKEND)/.venv
@@ -204,3 +204,9 @@ k8s-status:
 
 k8s-down:
 	kind delete cluster --name $(KIND_CLUSTER)
+
+# Load benchmark of the intake pipeline (docs/BENCHMARKS.md). Needs k6 and a running stack,
+# normally the kind cluster from `make k8s-deploy`; artifacts go to artifacts/load/<run_id>/.
+# make load-test RATE=25 DURATION=60 [LABEL="..."]
+load-test:
+	$(PY)/onramp-load-run --rate $(RATE) --duration $(DURATION) --label "$(LABEL)"

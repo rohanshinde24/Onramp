@@ -46,6 +46,7 @@ onramp-promptfoo-export = "onramp.entrypoints.promptfoo_export:main"
 onramp-workflow-worker = "onramp.entrypoints.workflow_worker:main"
 onramp-agent-worker = "onramp.entrypoints.agent_worker:main"
 onramp-case-signal-consumer = "onramp.entrypoints.case_signal_consumer:main"
+onramp-load-run = "onramp.entrypoints.load_run:main"
 
 [project.optional-dependencies]
 # Local embedding model for dense and hybrid policy retrieval (ADR-003 benchmark).
