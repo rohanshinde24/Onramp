@@ -190,16 +190,20 @@ def pipeline_report(onramp: sessionmaker[Session], run_id: str) -> dict[str, Any
     }
 
 
-def fallback_delivery(onramp: sessionmaker[Session], run_id: str) -> dict[str, Any]:
+def fallback_delivery(
+    onramp: sessionmaker[Session], run_id: str, restarted_at: datetime | None = None
+) -> dict[str, Any]:
     """Whether every ``case.created`` event of the run reached the case-signal consumer exactly
-    once, and when the last one was published. Used to judge a broker outage: the events wait
-    in the outbox while Kafka is down and must all arrive, once each, after it returns."""
+    once. Used to judge a broker outage: the events wait in the outbox while Kafka is down and
+    must all arrive, once each, after it returns. With ``restarted_at``, also how long after the
+    broker returned the last event created before then was published: the outage backlog, not
+    the events that load kept producing afterwards."""
     with onramp() as session:
         case_ids = select(SupportCase.id).where(
             SupportCase.tenant_id == LOAD_TENANT, SupportCase.intake_key.like(f"{run_id}-%")
         )
         events = session.execute(
-            select(OutboxEvent.event_id, OutboxEvent.published_at).where(
+            select(OutboxEvent.event_id, OutboxEvent.created_at, OutboxEvent.published_at).where(
                 OutboxEvent.tenant_id == LOAD_TENANT,
                 OutboxEvent.event_type == "case.created",
                 OutboxEvent.aggregate_id.in_(case_ids),
@@ -213,13 +217,22 @@ def fallback_delivery(onramp: sessionmaker[Session], run_id: str) -> dict[str, A
             )
         ).one()
     published = [row.published_at for row in events if row.published_at is not None]
-    return {
+    report: dict[str, Any] = {
         "events": len(event_ids),
         "published": len(published),
         "processed_by_signal_consumer": processed,
         "distinct_processed": distinct,
-        "last_published_at": max(published).isoformat() if published else None,
     }
+    if restarted_at is not None:
+        backlog = [row for row in events if row.created_at < restarted_at]
+        cleared = [row.published_at for row in backlog if row.published_at is not None]
+        report["backlog_events"] = len(backlog)
+        report["backlog_published"] = len(cleared)
+        if cleared and len(cleared) == len(backlog):
+            report["backlog_cleared_after_restart_s"] = (
+                max(cleared) - restarted_at
+            ).total_seconds()
+    return report
 
 
 def _as_dict(distribution: Distribution | None) -> dict[str, float] | None:

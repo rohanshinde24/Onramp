@@ -151,20 +151,16 @@ def _compose(*args: str) -> None:
 
 
 def _outage_report(onramp: Any, run_id: str, manifest: dict[str, Any]) -> dict[str, Any]:
-    """Wait for the fallback events to arrive, then say how long after the broker returned
-    the last one was published, and whether each arrived exactly once."""
+    """Wait for the fallback events to arrive, then say whether each arrived exactly once and
+    how long after the broker returned the events created before then were all published."""
+    started = manifest["kafka_outage"].get("started_at")
+    restarted_at = datetime.fromisoformat(started) if started else None
     deadline = time.monotonic() + 300
     while True:
-        delivery = fallback_delivery(onramp, run_id)
+        delivery = fallback_delivery(onramp, run_id, restarted_at)
         if delivery["distinct_processed"] >= delivery["events"] or time.monotonic() > deadline:
-            break
+            return delivery
         time.sleep(2)
-    started = manifest["kafka_outage"].get("started_at")
-    if started and delivery["last_published_at"]:
-        delivery["backlog_cleared_after_restart_s"] = (
-            datetime.fromisoformat(delivery["last_published_at"]) - datetime.fromisoformat(started)
-        ).total_seconds()
-    return delivery
 
 
 def _wait_until_settled(onramp: Any, run_id: str, timeout_s: int) -> dict[str, Any]:
