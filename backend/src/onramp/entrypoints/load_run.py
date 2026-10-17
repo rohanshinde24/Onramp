@@ -11,6 +11,7 @@ import json
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -21,6 +22,7 @@ from onramp.benchmarks.load import (
     LOAD_TENANT,
     SERVICE_USER,
     ensure_tenant,
+    fallback_delivery,
     pipeline_report,
     seed_subjects,
 )
@@ -42,6 +44,12 @@ def main() -> None:
     parser.add_argument("--settle-timeout", type=int, default=600, help="seconds")
     parser.add_argument("--label", default="", help="free text kept in the manifest")
     parser.add_argument("--kube-context", default="kind-onramp")
+    parser.add_argument(
+        "--kafka-outage",
+        metavar="AT:FOR",
+        help="stop the Compose Kafka broker AT seconds into the load and start it FOR seconds"
+        " later; the report then checks every case event arrived once",
+    )
     args = parser.parse_args()
 
     settings = get_settings()
@@ -81,6 +89,7 @@ def main() -> None:
         "started_at": datetime.now(UTC).isoformat(),
     }
     print(f"run {run_id}: {args.rate}/s for {args.duration}s against {args.api}", flush=True)
+    outage = _schedule_outage(args.kafka_outage, manifest) if args.kafka_outage else None
     subprocess.run(  # noqa: S603 - resolved k6 binary, fixed script
         [
             k6,
@@ -103,13 +112,59 @@ def main() -> None:
         check=False,
     )
     manifest["load_finished_at"] = datetime.now(UTC).isoformat()
+    if outage is not None:
+        outage.join()
 
     report = _wait_until_settled(onramp, run_id, args.settle_timeout)
     manifest["settled_at"] = datetime.now(UTC).isoformat()
+    if outage is not None:
+        report["kafka_outage"] = _outage_report(onramp, run_id, manifest)
     (out / "pipeline.json").write_text(json.dumps(report, indent=2) + "\n")
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     print(json.dumps({"k6": _k6_digest(out / "k6-summary.json"), "pipeline": report}, indent=2))
     print(f"artifacts: {out}")
+
+
+def _schedule_outage(spec: str, manifest: dict[str, Any]) -> threading.Thread:
+    """Stop the broker with ``docker compose stop``, which keeps its topics, then start it."""
+    at, length = (int(part) for part in spec.split(":"))
+    manifest["kafka_outage"] = {"at_s": at, "for_s": length}
+
+    def run() -> None:
+        time.sleep(at)
+        _compose("stop", "kafka")
+        manifest["kafka_outage"]["stopped_at"] = datetime.now(UTC).isoformat()
+        time.sleep(length)
+        _compose("start", "kafka")
+        manifest["kafka_outage"]["started_at"] = datetime.now(UTC).isoformat()
+
+    thread = threading.Thread(target=run, name="kafka-outage")
+    thread.start()
+    return thread
+
+
+def _compose(*args: str) -> None:
+    docker = shutil.which("docker")
+    if docker is None:
+        sys.exit("docker is not installed")
+    subprocess.run([docker, "compose", *args], cwd=ROOT, check=True, capture_output=True)  # noqa: S603
+
+
+def _outage_report(onramp: Any, run_id: str, manifest: dict[str, Any]) -> dict[str, Any]:
+    """Wait for the fallback events to arrive, then say how long after the broker returned
+    the last one was published, and whether each arrived exactly once."""
+    deadline = time.monotonic() + 300
+    while True:
+        delivery = fallback_delivery(onramp, run_id)
+        if delivery["distinct_processed"] >= delivery["events"] or time.monotonic() > deadline:
+            break
+        time.sleep(2)
+    started = manifest["kafka_outage"].get("started_at")
+    if started and delivery["last_published_at"]:
+        delivery["backlog_cleared_after_restart_s"] = (
+            datetime.fromisoformat(delivery["last_published_at"]) - datetime.fromisoformat(started)
+        ).total_seconds()
+    return delivery
 
 
 def _wait_until_settled(onramp: Any, run_id: str, timeout_s: int) -> dict[str, Any]:

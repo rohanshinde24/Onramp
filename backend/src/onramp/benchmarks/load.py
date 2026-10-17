@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from onramp.audit.models import AuditEvent
 from onramp.cases.models import SupportCase
-from onramp.events.models import OutboxEvent
+from onramp.events.models import OutboxEvent, ProcessedEvent
 from onramp.identity.models import Tenant, User
 from onramp.identity.roles import Role
 from onramp.marketplace.builder import WorldBuilder
@@ -29,6 +29,7 @@ from onramp.marketplace.models import MarketplaceTenant
 
 LOAD_TENANT = "loadtest"
 SERVICE_USER = f"{LOAD_TENANT}_{Role.MARKETPLACE_SERVICE.value}"
+SIGNAL_GROUP = "onramp-case-signals"
 PAYOUT_CENTS = 5_000
 
 
@@ -186,6 +187,38 @@ def pipeline_report(onramp: sessionmaker[Session], run_id: str) -> dict[str, Any
         "outbox_publish_lag_s": _as_dict(Distribution.of(publish_lag)),
         "unpublished_case_created": len(case_ids) - len(publish_lag),
         "proposals_per_s": throughput,
+    }
+
+
+def fallback_delivery(onramp: sessionmaker[Session], run_id: str) -> dict[str, Any]:
+    """Whether every ``case.created`` event of the run reached the case-signal consumer exactly
+    once, and when the last one was published. Used to judge a broker outage: the events wait
+    in the outbox while Kafka is down and must all arrive, once each, after it returns."""
+    with onramp() as session:
+        case_ids = select(SupportCase.id).where(
+            SupportCase.tenant_id == LOAD_TENANT, SupportCase.intake_key.like(f"{run_id}-%")
+        )
+        events = session.execute(
+            select(OutboxEvent.event_id, OutboxEvent.published_at).where(
+                OutboxEvent.tenant_id == LOAD_TENANT,
+                OutboxEvent.event_type == "case.created",
+                OutboxEvent.aggregate_id.in_(case_ids),
+            )
+        ).all()
+        event_ids = [row.event_id for row in events]
+        processed, distinct = session.execute(
+            select(func.count(), func.count(func.distinct(ProcessedEvent.event_id))).where(
+                ProcessedEvent.consumer_group == SIGNAL_GROUP,
+                ProcessedEvent.event_id.in_(event_ids),
+            )
+        ).one()
+    published = [row.published_at for row in events if row.published_at is not None]
+    return {
+        "events": len(event_ids),
+        "published": len(published),
+        "processed_by_signal_consumer": processed,
+        "distinct_processed": distinct,
+        "last_published_at": max(published).isoformat() if published else None,
     }
 
 
