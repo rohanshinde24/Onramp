@@ -10,7 +10,7 @@ approver.
 
 ## Status
 
-Phases 0 through 19 are complete. What works today:
+Phases 0 through 20 are complete. What works today:
 
 * tenants, users and roles, with bearer-token authentication whose role is always read from
   the database
@@ -58,7 +58,13 @@ Phases 0 through 19 are complete. What works today:
   collector, and KEDA scaling the consumers on Kafka lag and the opt-in agent worker on its
   Temporal backlog (ADR-013, `docs/OPERATIONS.md`)
 
-Not built yet: final scale benchmarks and AWS staging. The reference, adversarial and fault suites use
+* load benchmarks of the intake pipeline on the cluster with k6: a bottleneck in Temporal round
+  trips found and removed (cases reaching a proposal per second at saturation up about 1.5
+  times, intake to proposal p99 at 25 per second from 54.6 s to about 6 s), KEDA draining a lag
+  burst about 2.3 times faster than one consumer, and a Kafka outage under load with every case
+  event delivered exactly once afterwards (`docs/BENCHMARKS.md`)
+
+Not built yet: AWS staging. The reference, adversarial and fault suites use
 scripted investigations and measure the application; the judgment suite measures real models.
 
 ## Documents

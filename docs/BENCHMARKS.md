@@ -158,3 +158,117 @@ Limits:
   but this is a check on retrieval behavior, not an independent relevance study.
 * 41 queries is small; the intervals above are wide, and only differences whose intervals
   exclude zero are treated as real.
+
+## Intake pipeline under load
+
+Command: `make k8s-up && make k8s-deploy`, then `make load-test RATE=<n> DURATION=60` (k6
+v2.3.0 running `deploy/load/intake.js`). Each request opens a payout case for a fresh, settled
+in full submission in the `loadtest` tenant, which `onramp-load-run` seeds first. The real
+pipeline then carries it: the API commits the case and its `case.created` outbox row and starts
+the workflow, the outbox publisher sends the event to Kafka, the case-signal consumer delivers
+the fallback start, and the workflow worker runs the checks, which end in a system proposal
+waiting for an operator. Checks decide every case, so no model is called. Latency and
+throughput are read from PostgreSQL timestamps (case creation, the transition to `proposed`,
+outbox publication), not from k6. Artifacts: `artifacts/load/<run_id>/`.
+
+Setup for every run: one kind node (Kubernetes 1.37) in Docker Desktop with 8 GB and 8 CPUs on
+a 16 GB laptop; API 2 replicas, workflow worker 1, publishers and consumers 1 each; Postgres,
+Kafka (one broker) and the Temporal development server (SQLite) under Compose.
+
+### Finding and removing the first bottleneck
+
+At 25 intakes per second the API answered quickly and the outbox published within half a
+second, but fewer than 14 cases per second reached a proposal, and the wait grew for as long as
+the load lasted. Temporal's own metrics showed where: workflow tasks waited 5.4 s on average to
+start while each one executed in 2 ms, and the worker never used more than 8 of its 100
+workflow slots. Doubling the workflow workers changed throughput from 12.6 to 13.4 cases per
+second, so the worker was not the limit. Each task completion took about 90 ms on the Temporal
+server, and a case needed about 4.4 workflow tasks and 3.3 activities to reach its proposal.
+
+The fix reduced round trips rather than speeding anything up. Every activity already returns the
+case as it left it, so the workflow now decides on that snapshot instead of reading again, and
+the reads that remain are local activities, which complete inside the workflow task. Workflows
+started before the change replay on the original loop behind a Temporal patch
+(`test_case_workflow_replay.py` replays a recorded history, and fails with a nondeterminism
+error if the patch is bypassed).
+
+Before: commit `7a1e387`. After: commit `5b726b5`. Clean trees, 60 s of load each.
+
+| Run | Offered | Requests (failed) | API p50 / p99 | Reached proposal per s | Intake to proposal p50 / p99 | Outbox publish p99 |
+|---|---|---|---|---|---|---|
+| `20261017T111106Z` before | 25/s | 1,500 (0) | 91 / 228 ms | 13.7 | 16.2 / 54.6 s | 0.50 s |
+| `20261017T111306Z` before | 25/s | 1,501 (0) | 115 / 687 ms | 13.3 | 28.1 / 54.6 s | 0.51 s |
+| `20261017T111508Z` before | 50/s | 3,000 (0) | 153 / 414 ms | 13.7 | 87.7 / 158.4 s | 0.51 s |
+| `20261017T112032Z` after | 25/s | 1,501 (0) | 80 / 335 ms | 24.0 | 2.3 / 6.4 s | 0.51 s |
+| `20261017T112144Z` after | 25/s | 1,501 (0) | 72 / 313 ms | 23.7 | 0.9 / 6.2 s | 0.51 s |
+| `20261017T112255Z` after | 50/s | 3,001 (0) | 185 / 552 ms | 21.0 | 46.0 / 84.9 s | 0.51 s |
+
+What this shows:
+
+* At 25 per second the pipeline now keeps up (about 24 cases per second reach a proposal, the
+  rest are in flight when the load stops), where before it fell behind by about half.
+  Intake to proposal p99 fell from 54.6 s to about 6.3 s.
+* The ceiling at 50 per second rose from 13.7 to 21.0 cases per second, about 1.5 times.
+* Every request succeeded and every case reached its proposal in every run.
+
+What it costs, and what is left:
+
+* API latency rose. A trace of a slow intake spent 141 of its 153 ms in the API's
+  `StartWorkflow` call. With the workers no longer starved, that call competes with them for the
+  same Temporal server. The case-signal consumer's fallback start adds another call per case
+  (86 ms in the same trace) that the API's direct start has already made redundant.
+* The limit is now the Temporal development server's write path. A Temporal deployment with
+  production persistence is the next step for throughput, and Phase 21 decides its shape.
+
+### Autoscaling on consumer lag
+
+Command: `backend/.venv/bin/python deploy/k8s/kind/lag_burst.py 20000 --label <text>` at commit
+`e5849a7`. It publishes 20,000 valid `payment.settled` events for payments that do not exist, so
+the event consumer reads, deduplicates and records each without changing a case, and times the
+drain from `processed_event`. Pinned runs pause KEDA with `autoscaling.keda.sh/paused-replicas:
+"1"`. Artifacts: `artifacts/drain/<run_id>.json`.
+
+| Run | Consumer replicas | Drain time | Events per s | Processed / distinct |
+|---|---|---|---|---|
+| `20261017T112748Z` | pinned at 1 | 435.5 s | 45.9 | 20,000 / 20,000 |
+| `20261017T113507Z` | pinned at 1 | 426.3 s | 46.9 | 20,000 / 20,000 |
+| `20261017T114217Z` | KEDA, 1 to 3 | 203.5 s | 98.3 | 20,000 / 20,000 |
+| `20261017T114735Z` | KEDA, 1 to 3 | 169.4 s | 118.1 | 20,000 / 20,000 |
+
+KEDA drained the burst about 2.3 times faster than one replica. Not 3 times: each run starts at
+one replica and scales up while it drains. Every event was processed exactly once, across the
+rebalances that scaling up and down caused.
+
+### Kafka outage under load
+
+Command: `backend/.venv/bin/onramp-load-run --rate 10 --duration 180 --kafka-outage 40:60` at
+commit `e9c9dfd`. The broker is stopped with `docker compose stop kafka` 40 s into the load and
+started 60 s later, while intake continues.
+
+| Run | Requests (failed) | Reached proposal | Intake to proposal p99 | Outbox publish p99 / max | Events delivered / distinct | Backlog published after restart |
+|---|---|---|---|---|---|---|
+| `20261017T121028Z` | 1,800 (0) | 1,800 | 0.16 s | 59.3 / 61.0 s | 1,800 / 1,800 | within 3.6 s |
+| `20261017T121342Z` | 1,800 (0) | 1,800 | 0.12 s | 59.3 / 61.0 s | 1,800 / 1,800 | within 4.1 s |
+
+What this shows:
+
+* Intake and case progress never depended on the broker. The API commits the case and starts
+  its workflow directly; only the durable fallback waits for Kafka.
+* Every `case.created` event waited in the outbox for the outage and was then delivered to the
+  case-signal consumer exactly once. The last event created before the broker returned (about
+  1,000 per run, roughly 600 of them during the outage) was published 3.6 and 4.1 s after the
+  restart.
+
+### Limits
+
+* One laptop, one node, two runs per configuration. Differences of a few percent mean nothing
+  here; the before and after gap and the KEDA gap are far larger than the run to run spread.
+* Every run leaves its cases open, so the Temporal server's database grows through the session
+  and API latency rose for both versions as it did (p50 8 ms in the first run of the day, about
+  90 ms later). The after runs ran last, so this works against them.
+* The load is one case type that checks always settle. Investigations, approvals and gateway
+  writes are not under load here.
+* The drain burst uses events that change nothing, so it measures consumer overhead and
+  scaling, not the cost of real evidence handling.
+* Kafka is a single broker without replication; the outage test shows recovery semantics, not
+  broker durability.

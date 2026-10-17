@@ -4,7 +4,7 @@ This log records material differences between the original phased implementation
 system that was actually built. It is not a defect list. Some changes closed correctness gaps;
 others are explicit local-development compromises or deferred production work.
 
-Last reviewed: 2026-10-16 at Phase 19.
+Last reviewed: 2026-10-17 at Phase 20.
 
 ## Correctness changes discovered during implementation
 
@@ -246,6 +246,26 @@ The scenario format also gained `subject_id` (what the reporter names) and an op
 * Deferred: Temporal worker versioning for workflow code changes during rollouts (today a
   rolling update can replay old histories on new code), a staging overlay with an external
   secret store, alert rules on the cluster, a persistent Kafka volume in Compose.
+
+## Phase 20 adaptations
+
+* The case workflow changed for throughput, behind the Temporal patch
+  `reuse-activity-snapshots`. It decides on the snapshot each activity returns instead of
+  reading the case again after every step, and its remaining reads are local activities. The
+  lost-wake rule still holds: the wake counter is taken before the call whose snapshot decides
+  a wait. Workflows started before the patch replay on the original loop, which can be deleted
+  once none of them is open. Found by load testing (docs/BENCHMARKS.md): the Temporal
+  development server spends about 90 ms per task completion, so round trips set the ceiling.
+* Workflow test fakes now follow the contract real activities already had: an activity returns
+  the case as it left it. One fake returned a placeholder state and relied on the extra read.
+* The worker-restart workflow test runs without a sticky cache. The time-skipping test server
+  does not move a stopped worker's sticky tasks back to the shared queue; the real server does,
+  which was checked by restarting the workflow worker on the cluster while a case waited.
+* The outage benchmark stops Kafka with `docker compose stop`, which keeps its topics. Recreating
+  the container would lose them (Kafka has no volume under Compose).
+* Deferred: the redundant fallback `StartWorkflow` from the case-signal consumer for cases the
+  API already started, a production Temporal persistence layer (Phase 21), and load on cases
+  that need investigations, approvals and gateway writes.
 
 ## Deferred evaluation work
 
